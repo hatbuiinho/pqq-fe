@@ -9,6 +9,7 @@
 		title: string;
 		description?: string;
 		size?: ModalSize;
+		allowOverflow?: boolean;
 		closeOnBackdrop?: boolean;
 		closeOnEscape?: boolean;
 		children?: Snippet;
@@ -21,6 +22,7 @@
 		title,
 		description,
 		size = 'lg',
+		allowOverflow = false,
 		closeOnBackdrop = true,
 		closeOnEscape = true,
 		children,
@@ -70,7 +72,7 @@
 			aria-label="Close modal"
 		></button>
 		<div
-			class={`relative flex max-h-[90dvh] w-full min-w-0 flex-col overflow-hidden rounded-2xl bg-white shadow-xl ${sizeClasses[size]}`}
+			class={`relative flex max-h-[90dvh] w-full min-w-0 flex-col rounded-2xl bg-white shadow-xl ${allowOverflow ? 'overflow-visible' : 'overflow-hidden'} ${sizeClasses[size]}`}
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
@@ -91,7 +93,7 @@
 					<span class="icon-[mdi--close] size-5"></span>
 				</button>
 			</header>
-			<div class="min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+			<div class={`min-w-0 flex-1 px-4 py-4 sm:px-5 ${allowOverflow ? 'overflow-visible' : 'overflow-y-auto'}`}>
 				{@render children?.()}
 			</div>
 			{#if footer}

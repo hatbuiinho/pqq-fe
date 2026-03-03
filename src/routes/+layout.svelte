@@ -2,7 +2,15 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { AppModal, getDB, syncManager, syncStatus, subscribeDataChanged } from '$lib';
-	import type { BeltRank, Club, Student, SyncStatusSnapshot } from '$lib';
+	import type {
+		AttendanceRecord,
+		AttendanceSession,
+		BeltRank,
+		Club,
+		ClubGroup,
+		Student,
+		SyncStatusSnapshot
+	} from '$lib';
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import ToastViewport from '$lib/ui/components/ToastViewport.svelte';
@@ -12,7 +20,13 @@
 	let isLoadingSyncIssues = $state(false);
 	let syncIssues = $state<
 		Array<{
-			entityName: 'clubs' | 'belt_ranks' | 'students';
+			entityName:
+				| 'clubs'
+				| 'club_groups'
+				| 'belt_ranks'
+				| 'students'
+				| 'attendance_sessions'
+				| 'attendance_records';
 			recordId: string;
 			title: string;
 			detail?: string;
@@ -55,6 +69,12 @@
 			label: 'Students',
 			icon: 'icon-[mdi--account-school-outline]',
 			accent: 'from-[#65c7cb] to-[#5f82b8]'
+		},
+		{
+			href: '/attendance',
+			label: 'Attendance',
+			icon: 'icon-[mdi--clipboard-check-outline]',
+			accent: 'from-[#7bc3c6] to-[#4d7ca6]'
 		}
 	];
 
@@ -98,10 +118,13 @@
 		try {
 			isLoadingSyncIssues = true;
 			const db = getDB();
-			const [clubs, beltRanks, students] = await Promise.all([
+			const [clubs, clubGroups, beltRanks, students, attendanceSessions, attendanceRecords] = await Promise.all([
 				db.clubs.where('syncStatus').equals('failed').toArray(),
+				db.clubGroups.where('syncStatus').equals('failed').toArray(),
 				db.beltRanks.where('syncStatus').equals('failed').toArray(),
-				db.students.where('syncStatus').equals('failed').toArray()
+				db.students.where('syncStatus').equals('failed').toArray(),
+				db.attendanceSessions.where('syncStatus').equals('failed').toArray(),
+				db.attendanceRecords.where('syncStatus').equals('failed').toArray()
 			]);
 
 			syncIssues = [
@@ -111,6 +134,14 @@
 					title: club.name,
 					detail: club.code ?? club.id,
 					syncError: club.syncError,
+					href: '/clubs'
+				})),
+				...clubGroups.map((group: ClubGroup) => ({
+					entityName: 'club_groups' as const,
+					recordId: group.id,
+					title: group.name,
+					detail: group.clubId,
+					syncError: group.syncError,
 					href: '/clubs'
 				})),
 				...beltRanks.map((beltRank: BeltRank) => ({
@@ -128,6 +159,22 @@
 					detail: student.studentCode ?? student.id,
 					syncError: student.syncError,
 					href: '/students'
+				})),
+				...attendanceSessions.map((attendanceSession: AttendanceSession) => ({
+					entityName: 'attendance_sessions' as const,
+					recordId: attendanceSession.id,
+					title: attendanceSession.sessionDate,
+					detail: attendanceSession.clubId,
+					syncError: attendanceSession.syncError,
+					href: '/attendance'
+				})),
+				...attendanceRecords.map((attendanceRecord: AttendanceRecord) => ({
+					entityName: 'attendance_records' as const,
+					recordId: attendanceRecord.id,
+					title: attendanceRecord.studentId,
+					detail: attendanceRecord.sessionId,
+					syncError: attendanceRecord.syncError,
+					href: '/attendance'
 				}))
 			];
 		} finally {
@@ -144,14 +191,28 @@
 		syncIssuesOpen = false;
 	}
 
-	function getEntityLabel(entityName: 'clubs' | 'belt_ranks' | 'students'): string {
+	function getEntityLabel(
+		entityName:
+			| 'clubs'
+			| 'club_groups'
+			| 'belt_ranks'
+			| 'students'
+			| 'attendance_sessions'
+			| 'attendance_records'
+	): string {
 		switch (entityName) {
 			case 'clubs':
 				return 'Club';
+			case 'club_groups':
+				return 'Club group';
 			case 'belt_ranks':
 				return 'Belt rank';
 			case 'students':
 				return 'Student';
+			case 'attendance_sessions':
+				return 'Attendance session';
+			case 'attendance_records':
+				return 'Attendance record';
 		}
 	}
 

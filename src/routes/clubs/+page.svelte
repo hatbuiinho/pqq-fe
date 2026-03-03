@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { DataTableToolbar, EmptyState, IconActionButton, PageHeader, SectionCard, subscribeDataChanged } from '$lib';
-	import type { Club } from '$lib/domain/models';
-	import { clubUseCases } from '$lib/app/services';
+	import type { Club, ClubGroup, ClubSchedule, Weekday } from '$lib/domain/models';
+	import { clubGroupUseCases, clubScheduleUseCases, clubUseCases } from '$lib/app/services';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 	import { syncManager } from '$lib/app/sync/sync-manager';
 	import { toastError, toastSuccess } from '$lib/app/toast';
-	import { generateUniqueClubCode } from '$lib/domain/string-utils';
+	import { generateUniqueClubCode, normalizeSearchText } from '$lib/domain/string-utils';
+	import { formatWeekdayList, sortWeekdays, WEEKDAY_OPTIONS } from '$lib/domain/schedule-utils';
 	import AppModal from '$lib/ui/components/AppModal.svelte';
 	import DataPagination from '$lib/ui/components/DataPagination.svelte';
 
@@ -19,7 +20,15 @@
 		isActive: boolean;
 	};
 
-	type ClubFormErrors = Partial<Record<'name' | 'phone' | 'email', string>>;
+	type ClubFormErrors = Partial<Record<'name' | 'phone' | 'email' | 'trainingDays', string>>;
+
+	type ClubGroupForm = {
+		name: string;
+		description: string;
+		isActive: boolean;
+	};
+
+	type ClubGroupFormErrors = Partial<Record<'name', string>>;
 
 	type ClubImportRowError = {
 		row: number;
@@ -41,33 +50,72 @@
 	};
 
 	let clubs = $state<Club[]>([]);
+	let clubGroups = $state<ClubGroup[]>([]);
+	let clubSchedules = $state<ClubSchedule[]>([]);
 	let form = $state<ClubForm>({ ...initialForm });
+	let selectedTrainingDays = $state<Weekday[]>([]);
 	let editingId = $state<string | null>(null);
 	let isModalOpen = $state(false);
 	let isImportModalOpen = $state(false);
 	let isImportResultModalOpen = $state(false);
+	let isGroupsModalOpen = $state(false);
 	let search = $state('');
 	let currentPage = $state(1);
 	let isLoading = $state(false);
 	let isSubmitting = $state(false);
 	let isImporting = $state(false);
+	let isGroupsSubmitting = $state(false);
 	let errors = $state<ClubFormErrors>({});
+	let groupErrors = $state<ClubGroupFormErrors>({});
 	let importErrors = $state<ClubImportRowError[]>([]);
 	let importSummary = $state<ClubImportResponse | null>(null);
 	let importFile = $state<File | null>(null);
 	let importFileName = $state('');
 	let importFormError = $state('');
+	let selectedClubForGroups = $state<Club | null>(null);
+	let groupsForSelectedClub = $state<ClubGroup[]>([]);
+	let groupForm = $state<ClubGroupForm>({
+		name: '',
+		description: '',
+		isActive: true
+	});
+	let editingGroupId = $state<string | null>(null);
 	const generatedCode = $derived.by(() =>
 		generateUniqueClubCode(
 			form.name,
 			clubs.filter((club) => club.id !== editingId).map((club) => club.code ?? '')
 		)
 	);
+	const groupCountByClubId = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const group of clubGroups) {
+			if (group.deletedAt) continue;
+			counts.set(group.clubId, (counts.get(group.clubId) ?? 0) + 1);
+		}
+		return counts;
+	});
+	const scheduleByClubId = $derived.by(() => {
+		const map = new Map<string, Weekday[]>();
+		for (const schedule of clubSchedules) {
+			if (schedule.deletedAt || !schedule.isActive) continue;
+			const existing = map.get(schedule.clubId) ?? [];
+			existing.push(schedule.weekday);
+			map.set(schedule.clubId, existing);
+		}
+		for (const [clubId, weekdays] of map) {
+			map.set(clubId, sortWeekdays(weekdays));
+		}
+		return map;
+	});
 
 	const filteredClubs = $derived.by(() => {
-		const q = search.trim().toLowerCase();
+		const q = normalizeSearchText(search);
 		if (!q) return clubs;
-		return clubs.filter((club) => club.name.toLowerCase().includes(q) || (club.code ?? '').toLowerCase().includes(q));
+		return clubs.filter((club) =>
+			[club.name, club.code ?? '', club.phone ?? '', club.email ?? ''].some((value) =>
+				normalizeSearchText(value).includes(q)
+			)
+		);
 	});
 
 	function getClubStatusLabel(club: Club): string {
@@ -107,7 +155,11 @@
 	async function loadClubs() {
 		try {
 			isLoading = true;
-			clubs = await clubUseCases.list();
+			const [clubRows, clubGroupRows] = await Promise.all([clubUseCases.list(), clubGroupUseCases.list()]);
+			const clubScheduleRows = (await Promise.all(clubRows.map((club) => clubScheduleUseCases.listByClub(club.id)))).flat();
+			clubs = clubRows;
+			clubGroups = clubGroupRows;
+			clubSchedules = clubScheduleRows;
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Failed to load clubs.');
 		} finally {
@@ -117,6 +169,7 @@
 
 	function resetForm() {
 		form = { ...initialForm };
+		selectedTrainingDays = [];
 		errors = {};
 		editingId = null;
 	}
@@ -124,6 +177,16 @@
 	function openCreateModal() {
 		resetForm();
 		isModalOpen = true;
+	}
+
+	function resetGroupForm() {
+		groupForm = {
+			name: '',
+			description: '',
+			isActive: true
+		};
+		groupErrors = {};
+		editingGroupId = null;
 	}
 
 	function resetImportState() {
@@ -144,6 +207,13 @@
 		resetForm();
 	}
 
+	function closeGroupsModal() {
+		isGroupsModalOpen = false;
+		selectedClubForGroups = null;
+		groupsForSelectedClub = [];
+		resetGroupForm();
+	}
+
 	function closeImportModal() {
 		isImportModalOpen = false;
 		importFile = null;
@@ -160,6 +230,7 @@
 		if (club.deletedAt) return;
 		errors = {};
 		editingId = club.id;
+		selectedTrainingDays = scheduleByClubId.get(club.id) ?? [];
 		form = {
 			name: club.name,
 			phone: club.phone ?? '',
@@ -169,6 +240,47 @@
 			isActive: club.isActive
 		};
 		isModalOpen = true;
+	}
+
+	async function openGroupsModal(club: Club) {
+		selectedClubForGroups = club;
+		resetGroupForm();
+		await loadGroupsForClub(club.id);
+		isGroupsModalOpen = true;
+	}
+
+	async function loadGroupsForClub(clubId: string) {
+		groupsForSelectedClub = await clubGroupUseCases.listByClub(clubId);
+	}
+
+	function startEditGroup(group: ClubGroup) {
+		if (group.deletedAt) return;
+		editingGroupId = group.id;
+		groupErrors = {};
+		groupForm = {
+			name: group.name,
+			description: group.description ?? '',
+			isActive: group.isActive
+		};
+	}
+
+	function getGroupStatusLabel(group: ClubGroup): string {
+		if (group.deletedAt) {
+			return group.syncStatus === 'failed' ? 'Delete failed' : 'Pending delete';
+		}
+		if (group.syncStatus !== 'synced') {
+			return group.syncStatus === 'failed' ? group.syncError ?? 'Sync failed' : 'Waiting for sync';
+		}
+		return group.isActive ? 'Active' : 'Inactive';
+	}
+
+	function validateGroupForm(): boolean {
+		const nextErrors: ClubGroupFormErrors = {};
+		if (!groupForm.name.trim()) {
+			nextErrors.name = 'Group name is required.';
+		}
+		groupErrors = nextErrors;
+		return Object.keys(nextErrors).length === 0;
 	}
 
 	function validateForm(): boolean {
@@ -187,6 +299,10 @@
 
 		if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
 			nextErrors.email = 'Email format is invalid.';
+		}
+
+		if (selectedTrainingDays.length === 0) {
+			nextErrors.trainingDays = 'Select at least one training day.';
 		}
 
 		errors = nextErrors;
@@ -208,9 +324,10 @@
 					notes: form.notes,
 					isActive: form.isActive
 				});
+				await clubScheduleUseCases.saveWeekdays(editingId, selectedTrainingDays);
 				toastSuccess('Club updated.');
 			} else {
-				await clubUseCases.create({
+				const createdId = await clubUseCases.create({
 					name: form.name,
 					phone: form.phone,
 					email: form.email,
@@ -218,6 +335,7 @@
 					notes: form.notes,
 					isActive: form.isActive
 				});
+				await clubScheduleUseCases.saveWeekdays(createdId, selectedTrainingDays);
 				toastSuccess('Club created.');
 			}
 
@@ -229,6 +347,15 @@
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	function toggleTrainingDay(weekday: Weekday) {
+		if (selectedTrainingDays.includes(weekday)) {
+			selectedTrainingDays = selectedTrainingDays.filter((value) => value !== weekday);
+			return;
+		}
+
+		selectedTrainingDays = sortWeekdays([...selectedTrainingDays, weekday]);
 	}
 
 	async function handleDelete(clubId: string) {
@@ -311,6 +438,67 @@
 			isImporting = false;
 		}
 	}
+
+	async function handleGroupSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		if (!selectedClubForGroups) return;
+		if (!validateGroupForm()) return;
+
+		try {
+			isGroupsSubmitting = true;
+			if (editingGroupId) {
+				await clubGroupUseCases.update(editingGroupId, {
+					name: groupForm.name,
+					description: groupForm.description,
+					isActive: groupForm.isActive
+				});
+				toastSuccess('Group updated.');
+			} else {
+				await clubGroupUseCases.create({
+					clubId: selectedClubForGroups.id,
+					name: groupForm.name,
+					description: groupForm.description,
+					isActive: groupForm.isActive
+				});
+				toastSuccess('Group created.');
+			}
+
+			await loadClubs();
+			await loadGroupsForClub(selectedClubForGroups.id);
+			resetGroupForm();
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Failed to save group.');
+		} finally {
+			isGroupsSubmitting = false;
+		}
+	}
+
+	async function handleDeleteGroup(groupId: string) {
+		if (!selectedClubForGroups) return;
+
+		try {
+			await clubGroupUseCases.softDelete(groupId);
+			toastSuccess('Group deleted.');
+			if (editingGroupId === groupId) resetGroupForm();
+			await loadClubs();
+			await loadGroupsForClub(selectedClubForGroups.id);
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Failed to delete group.');
+		}
+	}
+
+	async function handleRestoreGroup(groupId: string) {
+		if (!selectedClubForGroups) return;
+
+		try {
+			await clubGroupUseCases.restore(groupId);
+			toastSuccess('Group restored.');
+			await loadClubs();
+			await loadGroupsForClub(selectedClubForGroups.id);
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Failed to restore group.');
+		}
+	}
 </script>
 
 <main class="mx-auto max-w-5xl space-y-8 px-4 py-8">
@@ -351,6 +539,10 @@
 							<div class="space-y-1">
 								<h3 class="font-semibold text-slate-900">{club.name}</h3>
 								<p class="text-sm text-slate-500">{club.code ?? 'No code'} • {club.phone ?? 'No phone'}</p>
+								<p class="text-sm text-slate-500">
+									{formatWeekdayList(scheduleByClubId.get(club.id) ?? []) || 'No training days'}
+								</p>
+								<p class="text-sm text-slate-500">{groupCountByClubId.get(club.id) ?? 0} group(s)</p>
 								<p class="text-sm text-slate-600">{getClubStatusLabel(club)}</p>
 							</div>
 							<div class="inline-flex gap-2">
@@ -361,6 +553,11 @@
 										onclick={() => handleRestore(club.id)}
 									/>
 								{:else}
+									<IconActionButton
+										icon="icon-[mdi--account-multiple-outline]"
+										label={`Manage groups for ${club.name}`}
+										onclick={() => openGroupsModal(club)}
+									/>
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
 										label={`Edit ${club.name}`}
@@ -386,6 +583,8 @@
 							<th class="py-2 pr-3">Name</th>
 							<th class="py-2 pr-3">Code</th>
 							<th class="py-2 pr-3">Phone</th>
+							<th class="py-2 pr-3">Training days</th>
+							<th class="py-2 pr-3">Groups</th>
 							<th class="py-2 pr-3">Status</th>
 							<th class="py-2 pr-0 text-right">Actions</th>
 						</tr>
@@ -396,6 +595,8 @@
 								<td class="py-3 pr-3 font-medium text-slate-900">{club.name}</td>
 								<td class="py-3 pr-3 text-slate-700">{club.code ?? '-'}</td>
 								<td class="py-3 pr-3 text-slate-700">{club.phone ?? '-'}</td>
+								<td class="py-3 pr-3 text-slate-700">{formatWeekdayList(scheduleByClubId.get(club.id) ?? []) || '-'}</td>
+								<td class="py-3 pr-3 text-slate-700">{groupCountByClubId.get(club.id) ?? 0}</td>
 								<td class="py-3 pr-3 text-slate-700">{getClubStatusLabel(club)}</td>
 								<td class="py-3 pl-3 pr-0 text-right">
 									<div class="inline-flex gap-2">
@@ -406,6 +607,11 @@
 												onclick={() => handleRestore(club.id)}
 											/>
 										{:else}
+											<IconActionButton
+												icon="icon-[mdi--account-multiple-outline]"
+												label={`Manage groups for ${club.name}`}
+												onclick={() => openGroupsModal(club)}
+											/>
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
 												label={`Edit ${club.name}`}
@@ -484,6 +690,30 @@
 			<span class="text-sm font-medium text-slate-700">Notes</span>
 			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}></textarea>
 		</label>
+		<div class="space-y-2 md:col-span-2">
+			<span class="text-sm font-medium text-slate-700">Training days *</span>
+			<div class="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+				{#each WEEKDAY_OPTIONS as option (option.value)}
+					<button
+						type="button"
+						class={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+							selectedTrainingDays.includes(option.value)
+								? 'border-slate-900 bg-slate-900 text-white'
+								: 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+						}`}
+						onclick={() => toggleTrainingDay(option.value)}
+					>
+						{option.shortLabel}
+					</button>
+				{/each}
+			</div>
+			{#if errors.trainingDays}
+				<span class="block text-xs text-red-600">{errors.trainingDays}</span>
+			{/if}
+			<p class="text-xs text-slate-500">
+				These training days are the default schedule for students who inherit the club schedule.
+			</p>
+		</div>
 		<label class="inline-flex items-center gap-2 md:col-span-2">
 			<input type="checkbox" bind:checked={form.isActive} />
 			<span class="text-sm text-slate-700">Active</span>
@@ -501,6 +731,101 @@
 			</button>
 		</div>
 	</form>
+</AppModal>
+
+<AppModal
+	open={isGroupsModalOpen}
+	title={selectedClubForGroups ? `Manage groups • ${selectedClubForGroups.name}` : 'Manage groups'}
+	description="Create and maintain groups directly inside the selected club."
+	size="lg"
+	onClose={closeGroupsModal}
+>
+	<div class="space-y-6">
+		<form class="grid gap-4 md:grid-cols-2" onsubmit={handleGroupSubmit}>
+			<label class="space-y-1">
+				<span class="text-sm font-medium text-slate-700">Group name *</span>
+				<input
+					class:border-red-300={!!groupErrors.name}
+					class="w-full rounded-lg border-slate-300"
+					bind:value={groupForm.name}
+					required
+				/>
+				{#if groupErrors.name}
+					<span class="block text-xs text-red-600">{groupErrors.name}</span>
+				{/if}
+			</label>
+			<label class="inline-flex items-center gap-2">
+				<input type="checkbox" bind:checked={groupForm.isActive} />
+				<span class="text-sm text-slate-700">Active group</span>
+			</label>
+			<label class="space-y-1 md:col-span-2">
+				<span class="text-sm font-medium text-slate-700">Description</span>
+				<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={groupForm.description}></textarea>
+			</label>
+			<div class="flex gap-3 md:col-span-2">
+				<button
+					class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+					type="submit"
+					disabled={isGroupsSubmitting}
+				>
+					{isGroupsSubmitting ? 'Saving...' : editingGroupId ? 'Update group' : 'Create group'}
+				</button>
+				<button
+					class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+					type="button"
+					onclick={resetGroupForm}
+				>
+					Reset
+				</button>
+			</div>
+		</form>
+
+		<div class="space-y-3">
+			<div class="flex items-center justify-between">
+				<h3 class="text-sm font-semibold text-slate-900">Groups in this club</h3>
+				<p class="text-xs text-slate-500">{groupsForSelectedClub.filter((group) => !group.deletedAt).length} active group(s)</p>
+			</div>
+
+			{#if groupsForSelectedClub.length === 0}
+				<EmptyState title="No groups yet" description="Create the first group for this club right here." />
+			{:else}
+				<div class="space-y-3">
+					{#each groupsForSelectedClub as group (group.id)}
+						<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+							<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div class="space-y-1">
+									<p class="font-semibold text-slate-900">{group.name}</p>
+									<p class="text-sm text-slate-600">{group.description || 'No description'}</p>
+									<p class="text-sm text-slate-500">{getGroupStatusLabel(group)}</p>
+								</div>
+								<div class="inline-flex gap-2">
+									{#if group.deletedAt}
+										<IconActionButton
+											icon="icon-[mdi--restore]"
+											label={`Restore ${group.name}`}
+											onclick={() => handleRestoreGroup(group.id)}
+										/>
+									{:else}
+										<IconActionButton
+											icon="icon-[mdi--pencil-outline]"
+											label={`Edit ${group.name}`}
+											onclick={() => startEditGroup(group)}
+										/>
+										<IconActionButton
+											icon="icon-[mdi--delete-outline]"
+											label={`Delete ${group.name}`}
+											variant="danger"
+											onclick={() => handleDeleteGroup(group.id)}
+										/>
+									{/if}
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
 </AppModal>
 
 <AppModal

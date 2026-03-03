@@ -49,6 +49,11 @@ export class DexieStudentRepository implements StudentRepository {
 		return rows.filter((student) => this.isVisible(student));
 	}
 
+	async listByGroup(groupId: string): Promise<Student[]> {
+		const rows = await getDB().students.where('groupId').equals(groupId).toArray();
+		return rows.filter((student) => this.isVisible(student));
+	}
+
 	async listByBeltRank(beltRankId: string): Promise<Student[]> {
 		const rows = await getDB().students.where('beltRankId').equals(beltRankId).toArray();
 		return rows.filter((student) => this.isVisible(student));

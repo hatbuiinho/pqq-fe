@@ -6,7 +6,7 @@
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 	import { syncManager } from '$lib/app/sync/sync-manager';
 	import { toastError, toastSuccess } from '$lib/app/toast';
-	import { generateBeltRankId } from '$lib/domain/string-utils';
+	import { generateBeltRankId, normalizeSearchText } from '$lib/domain/string-utils';
 	import AppModal from '$lib/ui/components/AppModal.svelte';
 	import DataPagination from '$lib/ui/components/DataPagination.svelte';
 
@@ -55,10 +55,13 @@
 	let importFormError = $state('');
 
 	const filteredBeltRanks = $derived.by(() => {
-		const q = search.trim().toLowerCase();
+		const q = normalizeSearchText(search);
 		if (!q) return beltRanks;
 		return beltRanks.filter(
-			(beltRank) => beltRank.name.toLowerCase().includes(q) || String(beltRank.order).includes(q)
+			(beltRank) =>
+				normalizeSearchText(beltRank.name).includes(q) ||
+				normalizeSearchText(String(beltRank.order)).includes(q) ||
+				normalizeSearchText(beltRank.description ?? '').includes(q)
 		);
 	});
 

@@ -57,3 +57,9 @@ export const generateUniqueClubCode = (name: string, existingCodes: string[]) =>
 };
 
 export const generateBeltRankId = (name: string) => slugify(name) || 'belt-rank';
+
+export const normalizeSearchText = (value: string) =>
+	unaccent(value)
+		.toLowerCase()
+		.trim()
+		.replace(/\s+/g, ' ');

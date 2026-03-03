@@ -8,6 +8,7 @@
 		showAgePresets?: boolean;
 		minAge?: number;
 		maxAge?: number;
+		iconOnly?: boolean;
 	};
 
 	let {
@@ -16,7 +17,8 @@
 		disabled = false,
 		showAgePresets = false,
 		minAge = 8,
-		maxAge = 50
+		maxAge = 50,
+		iconOnly = false
 	}: Props = $props();
 
 	let isOpen = $state(false);
@@ -111,14 +113,22 @@
 	<DatePicker bind:isOpen bind:startDate includeFont={false} enableFutureDates={false}>
 		<button
 			type="button"
-			class="flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+			class={`disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+				iconOnly
+					? 'inline-flex size-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+					: 'flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900'
+			}`}
 			onclick={handleInputClick}
 			disabled={disabled}
+			aria-label={placeholder}
+			title={placeholder}
 		>
 			<span class="icon-[mdi--calendar-month-outline] size-4 shrink-0 text-slate-500"></span>
-			<span class={`truncate ${value ? 'text-slate-900' : 'text-slate-400'}`}>
-				{value || placeholder}
-			</span>
+			{#if !iconOnly}
+				<span class={`truncate ${value ? 'text-slate-900' : 'text-slate-400'}`}>
+					{value || placeholder}
+				</span>
+			{/if}
 		</button>
 	</DatePicker>
 

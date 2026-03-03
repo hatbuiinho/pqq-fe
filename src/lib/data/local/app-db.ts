@@ -1,20 +1,44 @@
 import { browser } from '$app/environment';
-import type { BeltRank, Club, Student } from '$lib/domain/models';
+import type {
+	AttendanceRecord,
+	AttendanceSession,
+	BeltRank,
+	Club,
+	ClubGroup,
+	ClubSchedule,
+	Student,
+	StudentSchedule,
+	StudentScheduleProfile
+} from '$lib/domain/models';
 import Dexie, { type EntityTable } from 'dexie';
 
 export class AppDB extends Dexie {
 	clubs!: EntityTable<Club, 'id'>;
+	clubGroups!: EntityTable<ClubGroup, 'id'>;
+	clubSchedules!: EntityTable<ClubSchedule, 'id'>;
 	beltRanks!: EntityTable<BeltRank, 'id'>;
 	students!: EntityTable<Student, 'id'>;
+	studentScheduleProfiles!: EntityTable<StudentScheduleProfile, 'id'>;
+	studentSchedules!: EntityTable<StudentSchedule, 'id'>;
+	attendanceSessions!: EntityTable<AttendanceSession, 'id'>;
+	attendanceRecords!: EntityTable<AttendanceRecord, 'id'>;
 
 	constructor() {
 		super('martial-arts-club-db');
 
-		this.version(2).stores({
+		this.version(8).stores({
 			clubs: 'id, code, name, isActive, updatedAt, syncStatus, deletedAt',
+			clubGroups: 'id, clubId, name, isActive, updatedAt, syncStatus, deletedAt, [clubId+name]',
+			clubSchedules: 'id, clubId, weekday, isActive, updatedAt, syncStatus, deletedAt, [clubId+weekday]',
 			beltRanks: 'id, name, order, isActive, updatedAt, syncStatus, deletedAt',
 			students:
-				'id, studentCode, fullName, clubId, beltRankId, status, updatedAt, syncStatus, deletedAt, [clubId+status], [clubId+beltRankId]'
+				'id, studentCode, fullName, clubId, groupId, beltRankId, status, updatedAt, syncStatus, deletedAt, [clubId+status], [clubId+beltRankId], [clubId+groupId]',
+			studentScheduleProfiles: 'id, studentId, mode, updatedAt, syncStatus, deletedAt, [studentId+mode]',
+			studentSchedules: 'id, studentId, weekday, isActive, updatedAt, syncStatus, deletedAt, [studentId+weekday]',
+			attendanceSessions:
+				'id, clubId, sessionDate, status, updatedAt, syncStatus, deletedAt, [clubId+sessionDate]',
+			attendanceRecords:
+				'id, sessionId, studentId, attendanceStatus, updatedAt, syncStatus, deletedAt, [sessionId+studentId], [sessionId+attendanceStatus]'
 		});
 	}
 }

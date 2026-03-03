@@ -1,12 +1,37 @@
-import type { BeltRank, Club, Student } from '$lib/domain/models';
+import type {
+	AttendanceRecord,
+	AttendanceSession,
+	BeltRank,
+	Club,
+	ClubGroup,
+	ClubSchedule,
+	Student,
+	StudentSchedule,
+	StudentScheduleProfile
+} from '$lib/domain/models';
 
-export type SyncEntityName = 'clubs' | 'belt_ranks' | 'students';
+export type SyncEntityName =
+	| 'clubs'
+	| 'club_groups'
+	| 'club_schedules'
+	| 'belt_ranks'
+	| 'students'
+	| 'student_schedule_profiles'
+	| 'student_schedules'
+	| 'attendance_sessions'
+	| 'attendance_records';
 export type SyncOperation = 'upsert' | 'delete';
 
 export interface SyncEntityMap {
 	clubs: Club;
+	club_groups: ClubGroup;
+	club_schedules: ClubSchedule;
 	belt_ranks: BeltRank;
 	students: Student;
+	student_schedule_profiles: StudentScheduleProfile;
+	student_schedules: StudentSchedule;
+	attendance_sessions: AttendanceSession;
+	attendance_records: AttendanceRecord;
 }
 
 export type SyncEntityRecord = SyncEntityMap[keyof SyncEntityMap];
@@ -68,8 +93,14 @@ export interface SyncPullResponse {
 export interface SyncRebaseResponse {
 	serverTime: string;
 	clubs: Club[];
+	clubGroups: ClubGroup[];
+	clubSchedules: ClubSchedule[];
 	beltRanks: BeltRank[];
 	students: Student[];
+	studentScheduleProfiles: StudentScheduleProfile[];
+	studentSchedules: StudentSchedule[];
+	attendanceSessions: AttendanceSession[];
+	attendanceRecords: AttendanceRecord[];
 }
 
 export type SyncRealtimeEventType = 'connected' | 'sync.changed' | 'ping';
