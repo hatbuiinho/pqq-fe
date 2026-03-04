@@ -16,9 +16,13 @@
 	}: Props = $props();
 </script>
 
-<div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-	<div class="grid gap-2 md:grid-cols-2 xl:flex xl:items-center">
-		<input class="w-full rounded-lg border-slate-300 xl:w-72" placeholder={searchPlaceholder} bind:value={searchValue} />
+<div class="mb-2 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+	<div class="grid gap-2 md:grid-cols-2 xl:flex xl:min-w-0 xl:flex-1 xl:items-center">
+		<input
+			class="w-full rounded-lg border-slate-300 xl:min-w-0 xl:flex-1"
+			placeholder={searchPlaceholder}
+			bind:value={searchValue}
+		/>
 
 		{#if filters}
 			{@render filters()}

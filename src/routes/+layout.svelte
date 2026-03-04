@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { AppModal, getDB, syncManager, syncStatus, subscribeDataChanged } from '$lib';
+	import { AppModal, avatarUploadManager, getDB, syncManager, syncStatus, subscribeDataChanged } from '$lib';
 	import type {
 		AttendanceRecord,
 		AttendanceSession,
@@ -218,6 +218,7 @@
 
 	onMount(() => {
 		syncManager.start();
+		avatarUploadManager.start();
 
 		const unsubscribe = syncStatus.subscribe((value) => {
 			syncSnapshot = value;
@@ -230,6 +231,7 @@
 		return () => {
 			unsubscribe();
 			unsubscribeDataChanged();
+			avatarUploadManager.stop();
 			syncManager.stop();
 		};
 	});

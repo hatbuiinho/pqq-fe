@@ -43,6 +43,7 @@ class SyncManager {
 	private readonly realtimeClient = new WebSocketSyncClient(getWebSocketUrl());
 	private isStarted = false;
 	private isSyncing = false;
+	private hasQueuedSync = false;
 	private pullDebounceTimer: number | null = null;
 	private reconnectTimer: number | null = null;
 	private pollTimer: number | null = null;
@@ -94,9 +95,16 @@ class SyncManager {
 	}
 
 	async syncNow(): Promise<void> {
-		if (!browser || this.isSyncing || !navigator.onLine) {
+		if (!browser || !navigator.onLine) {
 			await this.refreshPendingCount();
 			updateSyncStatus({ online: browser ? navigator.onLine : true });
+			return;
+		}
+
+		if (this.isSyncing) {
+			this.hasQueuedSync = true;
+			await this.refreshPendingCount();
+			updateSyncStatus({ online: navigator.onLine });
 			return;
 		}
 
@@ -119,6 +127,10 @@ class SyncManager {
 		} finally {
 			this.isSyncing = false;
 			updateSyncStatus({ isSyncing: false, online: navigator.onLine });
+			if (this.hasQueuedSync && navigator.onLine) {
+				this.hasQueuedSync = false;
+				this.scheduleSync(0);
+			}
 		}
 	}
 

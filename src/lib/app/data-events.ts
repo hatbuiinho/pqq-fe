@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 
 const DATA_CHANGED_EVENT = 'app-data-changed';
 
-export type DataChangeSource = 'local' | 'sync' | 'attendance';
+export type DataChangeSource = 'local' | 'sync' | 'attendance' | 'avatar' | 'avatar-sync';
 
 type DataChangedDetail = {
 	source: DataChangeSource;

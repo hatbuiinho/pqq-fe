@@ -55,6 +55,77 @@ export interface Student extends BaseEntity<string> {
 	notes?: string;
 }
 
+export type StudentMediaType = 'avatar' | 'certificate' | 'exam_document' | 'photo' | 'other';
+
+export interface StudentAvatar {
+	id: string;
+	studentId: string;
+	mediaType: 'avatar';
+	originalFilename: string;
+	mimeType: string;
+	fileSize: number;
+	isPrimary: boolean;
+	uploadedAt: string;
+	downloadUrl?: string;
+	thumbnailUrl?: string;
+}
+
+export interface AvatarImportBatch {
+	id: string;
+	status: string;
+	sourceType: string;
+	originalFilename?: string;
+	totalItems: number;
+	matchedItems: number;
+	ambiguousItems: number;
+	unmatchedItems: number;
+	failedItems: number;
+	importedItems: number;
+	createdAt: string;
+	updatedAt: string;
+	processedAt?: string;
+}
+
+export interface AvatarImportBatchItem {
+	id: string;
+	batchId: string;
+	originalFilename: string;
+	mimeType: string;
+	fileSize: number;
+	guessedStudentId?: string;
+	guessedStudentName?: string;
+	matchMethod?: string;
+	matchScore?: number;
+	confirmedStudentId?: string;
+	status: string;
+	errorMessage?: string;
+	previewUrl?: string;
+	finalMediaId?: string;
+}
+
+export type StudentAvatarQueueStatus = 'pending' | 'uploading' | 'failed';
+
+export interface StudentAvatarQueueItem {
+	id: string;
+	studentId: string;
+	fileName: string;
+	mimeType: string;
+	fileSize: number;
+	blob: Blob;
+	status: StudentAvatarQueueStatus;
+	error?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface StudentAvatarCache {
+	studentId: string;
+	mediaId: string;
+	blob: Blob;
+	mimeType: string;
+	updatedAt: string;
+}
+
 export type AttendanceSessionStatus = 'draft' | 'completed';
 export type AttendanceStatus = 'unmarked' | 'present' | 'late' | 'excused' | 'absent';
 

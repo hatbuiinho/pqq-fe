@@ -1,5 +1,6 @@
 import type { Student, SyncStatus } from '$lib/domain/models';
 import { emitDataChanged } from '$lib/app/data-events';
+import { getDB } from '$lib/data/local/app-db';
 import type {
 	BeltRankRepository,
 	ClubGroupRepository,
@@ -84,7 +85,91 @@ export class StudentUseCases {
 	async update(id: string, patch: Partial<CreateStudentInput>, syncStatus: SyncStatus = 'pending'): Promise<number> {
 		const existingStudent = await this.studentRepo.getById(id);
 		if (!existingStudent || existingStudent.deletedAt) throw new Error('Student does not exist.');
+		const normalizedPatch = await this.prepareUpdatePatch(existingStudent, patch, syncStatus);
+		const updated = await this.studentRepo.update(id, normalizedPatch);
+		emitDataChanged();
+		return updated;
+	}
 
+	async bulkUpdate(
+		ids: string[],
+		patch: Partial<CreateStudentInput>,
+		syncStatus: SyncStatus = 'pending',
+		emitChange = true
+	): Promise<number> {
+		const uniqueIDs = [...new Set(ids)];
+		if (uniqueIDs.length === 0) return 0;
+
+		const existingStudents = await Promise.all(uniqueIDs.map((id) => this.studentRepo.getById(id)));
+		if (existingStudents.some((student) => !student || student.deletedAt)) {
+			throw new Error('One or more students do not exist.');
+		}
+
+		const normalizedPatches = await Promise.all(
+			existingStudents.map((student) =>
+				this.prepareUpdatePatch(student as Student, { ...patch }, syncStatus)
+			)
+		);
+
+		let updatedCount = 0;
+		const db = getDB();
+		await db.transaction('rw', db.students, async () => {
+			for (const [index, studentID] of uniqueIDs.entries()) {
+				updatedCount += await db.students.update(studentID, normalizedPatches[index]);
+			}
+		});
+
+		if (emitChange) {
+			emitDataChanged();
+		}
+
+		return updatedCount;
+	}
+
+	async softDelete(id: string): Promise<number> {
+		const deleted = await this.studentRepo.softDelete(id, new Date().toISOString());
+		emitDataChanged();
+		return deleted;
+	}
+
+	async bulkSoftDelete(ids: string[], emitChange = true): Promise<number> {
+		const uniqueIDs = [...new Set(ids)];
+		if (uniqueIDs.length === 0) return 0;
+
+		const deletedAt = new Date().toISOString();
+		const db = getDB();
+		let deletedCount = 0;
+
+		await db.transaction('rw', db.students, async () => {
+			for (const studentID of uniqueIDs) {
+				deletedCount += await db.students.update(studentID, {
+					deletedAt,
+					updatedAt: deletedAt,
+					lastModifiedAt: deletedAt,
+					syncStatus: 'pending',
+					syncError: undefined
+				});
+			}
+		});
+
+		if (emitChange) {
+			emitDataChanged();
+		}
+
+		return deletedCount;
+	}
+
+	async restore(id: string): Promise<number> {
+		const restored = await this.studentRepo.restore(id, new Date().toISOString());
+		emitDataChanged();
+		return restored;
+	}
+
+	private async prepareUpdatePatch(
+		existingStudent: Student,
+		patch: Partial<CreateStudentInput>,
+		syncStatus: SyncStatus
+	): Promise<Partial<Student>> {
 		if (patch.clubId) {
 			const club = await this.clubRepo.getById(patch.clubId);
 			if (!club || club.deletedAt) throw new Error('Club does not exist.');
@@ -100,9 +185,8 @@ export class StudentUseCases {
 			if (group.syncStatus !== 'synced') throw new Error('Group is not synced yet.');
 			if (!group.isActive) throw new Error('Group is inactive.');
 		}
-		if (patch.groupId === '') {
-			patch.groupId = undefined;
-		}
+
+		const normalizedGroupId = patch.groupId === '' ? undefined : patch.groupId;
 
 		if (patch.beltRankId) {
 			const beltRank = await this.beltRankRepo.getById(patch.beltRankId);
@@ -116,35 +200,21 @@ export class StudentUseCases {
 		const email = patch.email === undefined ? undefined : patch.email.trim() || undefined;
 		const address = patch.address === undefined ? undefined : patch.address.trim() || undefined;
 		const notes = patch.notes === undefined ? undefined : patch.notes.trim() || undefined;
-
 		const now = new Date().toISOString();
-		const updated = await this.studentRepo.update(id, {
+
+		return {
 			...patch,
 			fullName: patch.fullName?.trim(),
 			studentCode,
 			phone,
 			email,
 			address,
-			groupId: patch.groupId,
+			groupId: normalizedGroupId,
 			notes,
 			updatedAt: now,
 			lastModifiedAt: now,
 			syncStatus,
 			syncError: undefined
-		});
-		emitDataChanged();
-		return updated;
-	}
-
-	async softDelete(id: string): Promise<number> {
-		const deleted = await this.studentRepo.softDelete(id, new Date().toISOString());
-		emitDataChanged();
-		return deleted;
-	}
-
-	async restore(id: string): Promise<number> {
-		const restored = await this.studentRepo.restore(id, new Date().toISOString());
-		emitDataChanged();
-		return restored;
+		};
 	}
 }

@@ -5,8 +5,10 @@
 		AppModal,
 		EmptyState,
 		IconActionButton,
+		loadStudentAvatarPreviewMap,
 		PageHeader,
 		SectionCard,
+		StudentAvatarThumb,
 		StudentFormModal,
 		getTodayIsoDate,
 		normalizeDateInput,
@@ -168,6 +170,7 @@
 	let studentDetailForm = $state<StudentFormValue>(createInitialStudentDetailForm());
 	let studentDetailErrors = $state<StudentFormErrors>({});
 	let studentDetailCustomScheduleDays = $state<Weekday[]>([]);
+	let avatarUrls = $state<Record<string, string>>({});
 
 	const studentStatusOptions = [
 		{ label: 'Active', value: 'active' },
@@ -327,12 +330,21 @@
 		void loadInitialData();
 
 		return subscribeDataChanged((source) => {
+			if (source === 'avatar' || source === 'avatar-sync') {
+				void refreshVisibleAvatarPreviews();
+				return;
+			}
 			if (source === 'attendance') return;
 			if (source === 'local' && suppressLocalRefresh) {
 				return;
 			}
 			void refreshCurrentView();
 		});
+	});
+
+	$effect(() => {
+		filteredItems;
+		void refreshVisibleAvatarPreviews();
 	});
 
 	async function loadInitialData() {
@@ -961,6 +973,16 @@
 			}
 		}
 	}
+
+	async function refreshVisibleAvatarPreviews() {
+		const studentIds = filteredItems.map((item) => item.student.id);
+		if (studentIds.length === 0) {
+			avatarUrls = {};
+			return;
+		}
+
+		avatarUrls = await loadStudentAvatarPreviewMap(studentIds);
+	}
 </script>
 
 <main class="mx-auto max-w-7xl space-y-8 px-4 py-8">
@@ -1281,11 +1303,17 @@
 							{#each filteredItems as item (item.record.id)}
 								<div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
 									<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-										<div class="min-w-0">
-											<div class="flex flex-wrap items-center gap-2">
-												<p class="truncate text-base font-semibold text-slate-900">
-													{item.student.fullName}
-												</p>
+										<div class="flex min-w-0 items-start gap-3">
+											<StudentAvatarThumb
+												name={item.student.fullName}
+												src={avatarUrls[item.student.id]}
+												sizeClass="size-12"
+											/>
+											<div class="min-w-0">
+												<div class="flex flex-wrap items-center gap-2">
+													<p class="truncate text-base font-semibold text-slate-900">
+														{item.student.fullName}
+													</p>
 												{#if item.student.studentCode}
 													<span
 														class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500"
@@ -1301,15 +1329,16 @@
 													</span>
 												{/if}
 											</div>
-											<p class="mt-1 text-sm text-slate-500">
-												{#if item.student.groupId}
-													{groupMap.get(item.student.groupId) ?? 'Unknown group'} •
+												<p class="mt-1 text-sm text-slate-500">
+													{#if item.student.groupId}
+														{groupMap.get(item.student.groupId) ?? 'Unknown group'} •
+													{/if}
+													{beltRankMap.get(item.student.beltRankId) ?? 'Unknown belt rank'}
+												</p>
+												{#if item.record.notes}
+													<p class="mt-2 line-clamp-2 text-sm text-slate-600">{item.record.notes}</p>
 												{/if}
-												{beltRankMap.get(item.student.beltRankId) ?? 'Unknown belt rank'}
-											</p>
-											{#if item.record.notes}
-												<p class="mt-2 line-clamp-2 text-sm text-slate-600">{item.record.notes}</p>
-											{/if}
+											</div>
 										</div>
 
 										<div class="flex flex-wrap gap-2">
@@ -1461,6 +1490,7 @@
 	open={isStudentDetailModalOpen}
 	title="Student detail"
 	description="Update the student directly from the attendance sheet."
+	studentId={selectedStudentDetailId}
 	bind:form={studentDetailForm}
 	errors={studentDetailErrors}
 	bind:selectedCustomScheduleDays={studentDetailCustomScheduleDays}

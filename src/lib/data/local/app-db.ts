@@ -7,6 +7,8 @@ import type {
 	ClubGroup,
 	ClubSchedule,
 	Student,
+	StudentAvatarCache,
+	StudentAvatarQueueItem,
 	StudentSchedule,
 	StudentScheduleProfile
 } from '$lib/domain/models';
@@ -18,6 +20,8 @@ export class AppDB extends Dexie {
 	clubSchedules!: EntityTable<ClubSchedule, 'id'>;
 	beltRanks!: EntityTable<BeltRank, 'id'>;
 	students!: EntityTable<Student, 'id'>;
+	studentAvatarQueue!: EntityTable<StudentAvatarQueueItem, 'id'>;
+	studentAvatarCache!: EntityTable<StudentAvatarCache, 'studentId'>;
 	studentScheduleProfiles!: EntityTable<StudentScheduleProfile, 'id'>;
 	studentSchedules!: EntityTable<StudentSchedule, 'id'>;
 	attendanceSessions!: EntityTable<AttendanceSession, 'id'>;
@@ -26,13 +30,15 @@ export class AppDB extends Dexie {
 	constructor() {
 		super('martial-arts-club-db');
 
-		this.version(8).stores({
+		this.version(9).stores({
 			clubs: 'id, code, name, isActive, updatedAt, syncStatus, deletedAt',
 			clubGroups: 'id, clubId, name, isActive, updatedAt, syncStatus, deletedAt, [clubId+name]',
 			clubSchedules: 'id, clubId, weekday, isActive, updatedAt, syncStatus, deletedAt, [clubId+weekday]',
 			beltRanks: 'id, name, order, isActive, updatedAt, syncStatus, deletedAt',
 			students:
 				'id, studentCode, fullName, clubId, groupId, beltRankId, status, updatedAt, syncStatus, deletedAt, [clubId+status], [clubId+beltRankId], [clubId+groupId]',
+			studentAvatarQueue: 'id, studentId, status, updatedAt, [studentId+status]',
+			studentAvatarCache: 'studentId, mediaId, updatedAt',
 			studentScheduleProfiles: 'id, studentId, mode, updatedAt, syncStatus, deletedAt, [studentId+mode]',
 			studentSchedules: 'id, studentId, weekday, isActive, updatedAt, syncStatus, deletedAt, [studentId+weekday]',
 			attendanceSessions:
