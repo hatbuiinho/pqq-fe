@@ -59,13 +59,19 @@ export class StudentScheduleUseCases {
 		const uniqueIDs = [...new Set(studentIds)];
 		if (uniqueIDs.length === 0) return;
 
-		const students = await Promise.all(uniqueIDs.map((studentId) => this.studentRepo.getById(studentId)));
+		const students = await Promise.all(
+			uniqueIDs.map((studentId) => this.studentRepo.getById(studentId))
+		);
 		if (students.some((student) => !student || student.deletedAt)) {
 			throw new Error('One or more students do not exist.');
 		}
 
 		for (const student of students) {
-			await this.validateScheduleInput((student as NonNullable<typeof student>).clubId, mode, weekdays);
+			await this.validateScheduleInput(
+				(student as NonNullable<typeof student>).clubId,
+				mode,
+				weekdays
+			);
 		}
 
 		await this.saveForStudentsInternal(uniqueIDs, mode, weekdays);
@@ -84,7 +90,9 @@ export class StudentScheduleUseCases {
 		if (!club || club.deletedAt) throw new Error('Club does not exist.');
 
 		const clubWeekdays = new Set(
-			(await this.clubScheduleRepo.listByClub(clubId)).filter((row) => row.isActive).map((row) => row.weekday)
+			(await this.clubScheduleRepo.listByClub(clubId))
+				.filter((row) => row.isActive)
+				.map((row) => row.weekday)
 		);
 		const normalizedWeekdays = sortWeekdays(weekdays);
 
@@ -111,7 +119,10 @@ export class StudentScheduleUseCases {
 
 		await db.transaction('rw', db.studentScheduleProfiles, db.studentSchedules, async () => {
 			for (const studentId of studentIds) {
-				const existingProfile = await db.studentScheduleProfiles.where('studentId').equals(studentId).first();
+				const existingProfile = await db.studentScheduleProfiles
+					.where('studentId')
+					.equals(studentId)
+					.first();
 				if (existingProfile) {
 					await db.studentScheduleProfiles.update(existingProfile.id, {
 						mode,
@@ -134,7 +145,10 @@ export class StudentScheduleUseCases {
 					});
 				}
 
-				const existingSchedules = await db.studentSchedules.where('studentId').equals(studentId).toArray();
+				const existingSchedules = await db.studentSchedules
+					.where('studentId')
+					.equals(studentId)
+					.toArray();
 				const incomingWeekdays = new Set(targetWeekdays);
 
 				for (const row of existingSchedules) {

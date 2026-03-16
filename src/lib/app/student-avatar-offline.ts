@@ -51,7 +51,9 @@ function getQueuePreviewKey(item: Pick<StudentAvatarQueueItem, 'id' | 'updatedAt
 	return `queue:${item.id}:${item.updatedAt}`;
 }
 
-function getCachePreviewKey(item: Pick<StudentAvatarCache, 'studentId' | 'mediaId' | 'updatedAt'>): string {
+function getCachePreviewKey(
+	item: Pick<StudentAvatarCache, 'studentId' | 'mediaId' | 'updatedAt'>
+): string {
 	return `cache:${item.studentId}:${item.mediaId}:${item.updatedAt}`;
 }
 
@@ -200,9 +202,14 @@ export async function syncStudentAvatarCache(
 export async function getStudentAvatarPreviewUrl(studentId: string): Promise<string> {
 	if (!browser) return '';
 
-	const queueItems = await getDB().studentAvatarQueue.where('studentId').equals(studentId).toArray();
+	const queueItems = await getDB()
+		.studentAvatarQueue.where('studentId')
+		.equals(studentId)
+		.toArray();
 	const activeDraft = queueItems
-		.filter((item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'failed')
+		.filter(
+			(item) => item.status === 'pending' || item.status === 'uploading' || item.status === 'failed'
+		)
 		.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 
 	if (activeDraft) {
@@ -241,7 +248,9 @@ export async function loadStudentAvatarPreviewMap(
 ): Promise<Record<string, string>> {
 	const uniqueStudentIds = [...new Set(studentIds.filter(Boolean))];
 	const pairs = await Promise.all(
-		uniqueStudentIds.map(async (studentId) => [studentId, await getStudentAvatarPreviewUrl(studentId)] as const)
+		uniqueStudentIds.map(
+			async (studentId) => [studentId, await getStudentAvatarPreviewUrl(studentId)] as const
+		)
 	);
 
 	return Object.fromEntries(pairs);

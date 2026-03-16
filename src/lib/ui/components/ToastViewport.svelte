@@ -14,7 +14,9 @@
 	}
 </script>
 
-<div class="pointer-events-none fixed right-4 top-4 z-[100] flex w-[min(420px,calc(100vw-2rem))] flex-col gap-2">
+<div
+	class="pointer-events-none fixed top-4 right-4 z-[100] flex w-[min(420px,calc(100vw-2rem))] flex-col gap-2"
+>
 	{#each $toasts as toast (toast.id)}
 		<div class={`pointer-events-auto rounded-xl border px-3 py-2 shadow-sm ${toastStyles(toast)}`}>
 			<div class="flex items-start gap-2">

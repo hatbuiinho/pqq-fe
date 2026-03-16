@@ -17,7 +17,8 @@ export class BeltRankUseCases {
 
 	async create(input: CreateBeltRankInput): Promise<string> {
 		if (!input.name.trim()) throw new Error('Belt rank name is required.');
-		if (!Number.isInteger(input.order) || input.order < 1) throw new Error('Belt rank order must be >= 1.');
+		if (!Number.isInteger(input.order) || input.order < 1)
+			throw new Error('Belt rank order must be >= 1.');
 
 		const duplicated = await this.repo.getByOrder(input.order);
 		if (duplicated) throw new Error('Belt rank order already exists.');
@@ -56,7 +57,8 @@ export class BeltRankUseCases {
 
 		const nextOrder = patch.order ?? current.order;
 		const nextName = patch.name?.trim() ?? current.name;
-		if (!Number.isInteger(nextOrder) || nextOrder < 1) throw new Error('Belt rank order must be >= 1.');
+		if (!Number.isInteger(nextOrder) || nextOrder < 1)
+			throw new Error('Belt rank order must be >= 1.');
 
 		const duplicated = await this.repo.getByOrder(nextOrder);
 		if (duplicated && duplicated.id !== id) throw new Error('Belt rank order already exists.');

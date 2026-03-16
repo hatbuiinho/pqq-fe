@@ -58,14 +58,14 @@ export class DexieClubScheduleRepository implements ClubScheduleRepository {
 			for (const weekday of normalizedWeekdays) {
 				const existingRow = existing.find((row) => row.weekday === weekday);
 				if (existingRow) {
-				await db.clubSchedules.update(existingRow.id, {
-					isActive: true,
-					deletedAt: undefined,
-					updatedAt: now,
-					lastModifiedAt: now,
-					syncStatus: 'pending',
-					syncError: undefined
-				});
+					await db.clubSchedules.update(existingRow.id, {
+						isActive: true,
+						deletedAt: undefined,
+						updatedAt: now,
+						lastModifiedAt: now,
+						syncStatus: 'pending',
+						syncError: undefined
+					});
 					continue;
 				}
 

@@ -47,7 +47,10 @@ export interface AttendanceSessionRepository extends BaseRepository<AttendanceSe
 
 export interface AttendanceRecordRepository extends BaseRepository<AttendanceRecord, string> {
 	listBySession(sessionId: string): Promise<AttendanceRecord[]>;
-	getBySessionAndStudent(sessionId: string, studentId: string): Promise<AttendanceRecord | undefined>;
+	getBySessionAndStudent(
+		sessionId: string,
+		studentId: string
+	): Promise<AttendanceRecord | undefined>;
 }
 
 export interface ClubScheduleRepository extends BaseRepository<ClubSchedule, string> {
@@ -55,7 +58,10 @@ export interface ClubScheduleRepository extends BaseRepository<ClubSchedule, str
 	replaceForClub(clubId: string, weekdays: Weekday[]): Promise<void>;
 }
 
-export interface StudentScheduleProfileRepository extends BaseRepository<StudentScheduleProfile, string> {
+export interface StudentScheduleProfileRepository extends BaseRepository<
+	StudentScheduleProfile,
+	string
+> {
 	getByStudent(studentId: string): Promise<StudentScheduleProfile | undefined>;
 	saveForStudent(studentId: string, mode: StudentScheduleProfile['mode']): Promise<void>;
 }

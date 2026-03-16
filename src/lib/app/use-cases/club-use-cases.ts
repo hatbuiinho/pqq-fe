@@ -45,7 +45,11 @@ export class ClubUseCases {
 		return id;
 	}
 
-	async update(id: string, patch: Partial<CreateClubInput>, syncStatus: SyncStatus = 'pending'): Promise<number> {
+	async update(
+		id: string,
+		patch: Partial<CreateClubInput>,
+		syncStatus: SyncStatus = 'pending'
+	): Promise<number> {
 		const now = new Date().toISOString();
 		const existingClubs = await this.repo.list();
 		const normalizedName = patch.name?.trim();

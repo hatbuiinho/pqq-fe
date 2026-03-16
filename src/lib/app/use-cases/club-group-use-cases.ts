@@ -113,7 +113,8 @@ export class ClubGroupUseCases {
 				!group.deletedAt &&
 				group.name.trim().toLowerCase() === existing.name.trim().toLowerCase()
 		);
-		if (hasDuplicate) throw new Error('Cannot restore because another active group already uses this name.');
+		if (hasDuplicate)
+			throw new Error('Cannot restore because another active group already uses this name.');
 
 		const restoredAt = new Date().toISOString();
 		const restored = await this.repo.update(id, {

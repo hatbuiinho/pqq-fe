@@ -924,7 +924,11 @@
 	function handleAvatarImportDragLeave(event: DragEvent) {
 		event.preventDefault();
 		const nextTarget = event.relatedTarget as Node | null;
-		if (nextTarget && event.currentTarget instanceof HTMLElement && event.currentTarget.contains(nextTarget)) {
+		if (
+			nextTarget &&
+			event.currentTarget instanceof HTMLElement &&
+			event.currentTarget.contains(nextTarget)
+		) {
 			return;
 		}
 		isAvatarImportDragActive = false;
@@ -954,7 +958,7 @@
 				response.items.map((item) => {
 					const selectedStudentId =
 						avatarImportMatchMode === 'auto'
-							? item.confirmedStudentId ?? item.guessedStudentId ?? ''
+							? (item.confirmedStudentId ?? item.guessedStudentId ?? '')
 							: '';
 					return [item.id, selectedStudentId];
 				})
@@ -1277,15 +1281,17 @@
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
 										<span class="truncate">
-										{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
-											• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
-											student.beltRankId
-										) ?? '-'}
+											{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
+												• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
+												student.beltRankId
+											) ?? '-'}
 										</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-500">
 										<span class="icon-[mdi--calendar-week-outline] h-4 w-4 shrink-0"></span>
-										<span class="truncate">{getStudentScheduleSummary(student.id, student.clubId)}</span>
+										<span class="truncate"
+											>{getStudentScheduleSummary(student.id, student.clubId)}</span
+										>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--sync-alert] h-4 w-4 shrink-0"></span>
@@ -1344,15 +1350,17 @@
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
 										<span class="truncate">
-										{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
-											• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
-											student.beltRankId
-										) ?? '-'}
+											{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
+												• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
+												student.beltRankId
+											) ?? '-'}
 										</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-500">
 										<span class="icon-[mdi--calendar-week-outline] h-4 w-4 shrink-0"></span>
-										<span class="truncate">{getStudentScheduleSummary(student.id, student.clubId)}</span>
+										<span class="truncate"
+											>{getStudentScheduleSummary(student.id, student.clubId)}</span
+										>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-check-outline] h-4 w-4 shrink-0"></span>
@@ -1846,9 +1854,12 @@
 												disabled={item.status === 'failed' || item.status === 'imported'}
 												maxSuggestions={5}
 												emptyText="No student found."
-												onInputChange={(nextValue) => handleAvatarSelectionInput(item.id, nextValue)}
+												onInputChange={(nextValue) =>
+													handleAvatarSelectionInput(item.id, nextValue)}
 												onSelect={(option) => {
-													const selectedStudent = students.find((student) => student.id === option.id);
+													const selectedStudent = students.find(
+														(student) => student.id === option.id
+													);
 													if (selectedStudent) {
 														chooseAvatarImportStudent(item.id, selectedStudent);
 													}

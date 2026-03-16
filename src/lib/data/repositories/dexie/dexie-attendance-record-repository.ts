@@ -49,8 +49,14 @@ export class DexieAttendanceRecordRepository implements AttendanceRecordReposito
 		return rows.filter((row) => this.isVisible(row));
 	}
 
-	async getBySessionAndStudent(sessionId: string, studentId: string): Promise<AttendanceRecord | undefined> {
-		const row = await getDB().attendanceRecords.where('[sessionId+studentId]').equals([sessionId, studentId]).first();
+	async getBySessionAndStudent(
+		sessionId: string,
+		studentId: string
+	): Promise<AttendanceRecord | undefined> {
+		const row = await getDB()
+			.attendanceRecords.where('[sessionId+studentId]')
+			.equals([sessionId, studentId])
+			.first();
 		if (!row || row.deletedAt) return undefined;
 		return row;
 	}

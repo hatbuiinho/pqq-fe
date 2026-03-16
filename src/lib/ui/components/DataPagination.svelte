@@ -19,7 +19,9 @@
 	}
 </script>
 
-<div class="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+<div
+	class="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between"
+>
 	<p class="text-sm text-slate-500">
 		Showing {startItem}-{endItem} of {totalItems}
 	</p>
@@ -33,7 +35,9 @@
 		>
 			Previous
 		</button>
-		<span class="min-w-20 text-center text-sm font-medium text-slate-700">{currentPage} / {totalPages}</span>
+		<span class="min-w-20 text-center text-sm font-medium text-slate-700"
+			>{currentPage} / {totalPages}</span
+		>
 		<button
 			type="button"
 			class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50"

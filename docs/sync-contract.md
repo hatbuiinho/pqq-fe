@@ -1,6 +1,7 @@
 # Sync Contract v1
 
 Muc tieu:
+
 - Ho tro PWA offline-first.
 - FE la nguon tao thay doi local.
 - Backend Go la nguon su that cuoi cung.
@@ -17,6 +18,7 @@ Muc tieu:
 6. `pull` moi la nguon du lieu chuan de merge vao local DB.
 
 Nguyen tac:
+
 - Khong broadcast full record qua websocket trong v1.
 - Websocket chi dung de thong bao "co thay doi".
 - Du lieu chuan luon di qua `pull`.
@@ -32,28 +34,28 @@ Request:
 
 ```json
 {
-  "deviceId": "device-001",
-  "mutations": [
-    {
-      "mutationId": "0f6ec2e6-2fd7-4f9d-bc04-0f8f3b32a3ad",
-      "entityName": "students",
-      "operation": "upsert",
-      "recordId": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
-      "clientModifiedAt": "2026-02-28T08:20:00.000Z",
-      "record": {
-        "id": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
-        "studentCode": null,
-        "fullName": "Nguyen Van A",
-        "clubId": "vo-duong-trung-tam-a1b2",
-        "beltRankId": "dai-trang-1",
-        "status": "active",
-        "createdAt": "2026-02-28T08:20:00.000Z",
-        "updatedAt": "2026-02-28T08:20:00.000Z",
-        "lastModifiedAt": "2026-02-28T08:20:00.000Z",
-        "syncStatus": "pending"
-      }
-    }
-  ]
+	"deviceId": "device-001",
+	"mutations": [
+		{
+			"mutationId": "0f6ec2e6-2fd7-4f9d-bc04-0f8f3b32a3ad",
+			"entityName": "students",
+			"operation": "upsert",
+			"recordId": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
+			"clientModifiedAt": "2026-02-28T08:20:00.000Z",
+			"record": {
+				"id": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
+				"studentCode": null,
+				"fullName": "Nguyen Van A",
+				"clubId": "vo-duong-trung-tam-a1b2",
+				"beltRankId": "dai-trang-1",
+				"status": "active",
+				"createdAt": "2026-02-28T08:20:00.000Z",
+				"updatedAt": "2026-02-28T08:20:00.000Z",
+				"lastModifiedAt": "2026-02-28T08:20:00.000Z",
+				"syncStatus": "pending"
+			}
+		}
+	]
 }
 ```
 
@@ -61,26 +63,26 @@ Response:
 
 ```json
 {
-  "serverTime": "2026-02-28T08:21:00.000Z",
-  "applied": [
-    {
-      "entityName": "students",
-      "serverModifiedAt": "2026-02-28T08:21:00.000Z",
-      "record": {
-        "id": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
-        "studentCode": "PQQ-000001",
-        "fullName": "Nguyen Van A",
-        "clubId": "vo-duong-trung-tam-a1b2",
-        "beltRankId": "dai-trang-1",
-        "status": "active",
-        "createdAt": "2026-02-28T08:20:00.000Z",
-        "updatedAt": "2026-02-28T08:21:00.000Z",
-        "lastModifiedAt": "2026-02-28T08:21:00.000Z",
-        "syncStatus": "synced"
-      }
-    }
-  ],
-  "conflicts": []
+	"serverTime": "2026-02-28T08:21:00.000Z",
+	"applied": [
+		{
+			"entityName": "students",
+			"serverModifiedAt": "2026-02-28T08:21:00.000Z",
+			"record": {
+				"id": "4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4",
+				"studentCode": "PQQ-000001",
+				"fullName": "Nguyen Van A",
+				"clubId": "vo-duong-trung-tam-a1b2",
+				"beltRankId": "dai-trang-1",
+				"status": "active",
+				"createdAt": "2026-02-28T08:20:00.000Z",
+				"updatedAt": "2026-02-28T08:21:00.000Z",
+				"lastModifiedAt": "2026-02-28T08:21:00.000Z",
+				"syncStatus": "synced"
+			}
+		}
+	],
+	"conflicts": []
 }
 ```
 
@@ -88,27 +90,27 @@ Response:
 
 ```json
 {
-  "serverTime": "2026-02-28T08:21:00.000Z",
-  "applied": [],
-  "conflicts": [
-    {
-      "mutationId": "0f6ec2e6-2fd7-4f9d-bc04-0f8f3b32a3ad",
-      "entityName": "belt_ranks",
-      "recordId": "dai-vang-2",
-      "reason": "duplicate_value",
-      "message": "Belt rank order already exists.",
-      "serverRecord": {
-        "id": "dai-vang-2",
-        "name": "Dai vang",
-        "order": 2,
-        "isActive": true,
-        "createdAt": "2026-02-27T10:00:00.000Z",
-        "updatedAt": "2026-02-28T07:00:00.000Z",
-        "lastModifiedAt": "2026-02-28T07:00:00.000Z",
-        "syncStatus": "synced"
-      }
-    }
-  ]
+	"serverTime": "2026-02-28T08:21:00.000Z",
+	"applied": [],
+	"conflicts": [
+		{
+			"mutationId": "0f6ec2e6-2fd7-4f9d-bc04-0f8f3b32a3ad",
+			"entityName": "belt_ranks",
+			"recordId": "dai-vang-2",
+			"reason": "duplicate_value",
+			"message": "Belt rank order already exists.",
+			"serverRecord": {
+				"id": "dai-vang-2",
+				"name": "Dai vang",
+				"order": 2,
+				"isActive": true,
+				"createdAt": "2026-02-27T10:00:00.000Z",
+				"updatedAt": "2026-02-28T07:00:00.000Z",
+				"lastModifiedAt": "2026-02-28T07:00:00.000Z",
+				"syncStatus": "synced"
+			}
+		}
+	]
 }
 ```
 
@@ -120,24 +122,24 @@ Response:
 
 ```json
 {
-  "serverTime": "2026-02-28T08:30:00.000Z",
-  "nextSince": "2026-02-28T08:30:00.000Z",
-  "hasMore": false,
-  "changes": [
-    {
-      "entityName": "clubs",
-      "serverModifiedAt": "2026-02-28T08:25:00.000Z",
-      "record": {
-        "id": "vo-duong-trung-tam-a1b2",
-        "name": "Vo duong Trung Tam",
-        "isActive": true,
-        "createdAt": "2026-02-28T08:00:00.000Z",
-        "updatedAt": "2026-02-28T08:25:00.000Z",
-        "lastModifiedAt": "2026-02-28T08:25:00.000Z",
-        "syncStatus": "synced"
-      }
-    }
-  ]
+	"serverTime": "2026-02-28T08:30:00.000Z",
+	"nextSince": "2026-02-28T08:30:00.000Z",
+	"hasMore": false,
+	"changes": [
+		{
+			"entityName": "clubs",
+			"serverModifiedAt": "2026-02-28T08:25:00.000Z",
+			"record": {
+				"id": "vo-duong-trung-tam-a1b2",
+				"name": "Vo duong Trung Tam",
+				"isActive": true,
+				"createdAt": "2026-02-28T08:00:00.000Z",
+				"updatedAt": "2026-02-28T08:25:00.000Z",
+				"lastModifiedAt": "2026-02-28T08:25:00.000Z",
+				"syncStatus": "synced"
+			}
+		}
+	]
 }
 ```
 
@@ -146,10 +148,12 @@ Response:
 WebSocket endpoint de nhan realtime notification.
 
 Muc dich:
+
 - Bao cho cac client online biet da co thay doi tren server.
 - Khong dung thay the cho `pull`.
 
 Client flow:
+
 1. Mo websocket sau khi dang nhap hoac khi app online.
 2. Khi nhan `sync.changed`, debounce ngan.
 3. Goi `pull(since=lastSyncAt)`.
@@ -161,9 +165,9 @@ Connected:
 
 ```json
 {
-  "type": "connected",
-  "connectionId": "ws_01JMM3Q4M6HE7RYW4D9R2G5JQ0",
-  "serverTime": "2026-02-28T08:30:00.000Z"
+	"type": "connected",
+	"connectionId": "ws_01JMM3Q4M6HE7RYW4D9R2G5JQ0",
+	"serverTime": "2026-02-28T08:30:00.000Z"
 }
 ```
 
@@ -171,10 +175,10 @@ Changed:
 
 ```json
 {
-  "type": "sync.changed",
-  "serverTime": "2026-02-28T08:31:00.000Z",
-  "entityNames": ["students"],
-  "recordIds": ["4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4"]
+	"type": "sync.changed",
+	"serverTime": "2026-02-28T08:31:00.000Z",
+	"entityNames": ["students"],
+	"recordIds": ["4f9c8e17-8cb5-4f0e-b7d4-4df4de85f5a4"]
 }
 ```
 
@@ -182,12 +186,13 @@ Ping:
 
 ```json
 {
-  "type": "ping",
-  "serverTime": "2026-02-28T08:31:30.000Z"
+	"type": "ping",
+	"serverTime": "2026-02-28T08:31:30.000Z"
 }
 ```
 
 Luu y:
+
 - `recordIds` chi de hint, FE khong merge truc tiep tu message nay.
 - Neu co nhieu thay doi lien tiep, backend co the gop thanh 1 event `sync.changed`.
 - FE nen debounce 300-500ms truoc khi goi `pull`.

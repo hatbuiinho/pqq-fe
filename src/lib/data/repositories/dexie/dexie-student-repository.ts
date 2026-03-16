@@ -13,7 +13,9 @@ export class DexieStudentRepository implements StudentRepository {
 
 	async list(): Promise<Student[]> {
 		const rows = await getDB().students.toArray();
-		return rows.filter((student) => this.isVisible(student)).sort((a, b) => a.fullName.localeCompare(b.fullName));
+		return rows
+			.filter((student) => this.isVisible(student))
+			.sort((a, b) => a.fullName.localeCompare(b.fullName));
 	}
 
 	async create(entity: Student): Promise<string> {

@@ -29,7 +29,7 @@
 </script>
 
 <button
-	type={type}
+	{type}
 	class={`inline-flex size-10 items-center justify-center rounded-lg border transition ${variantClass}`}
 	use:tooltip={tooltipText ?? label}
 	aria-label={label}

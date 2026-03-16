@@ -47,6 +47,7 @@
 	};
 
 	type SummaryItem = {
+		status: AttendanceStatus;
 		label: string;
 		value: number;
 		tone: string;
@@ -89,34 +90,47 @@
 
 	const attendanceStatuses: Array<{
 		label: string;
+		shortLabel: string;
 		value: AttendanceStatus;
 		icon: string;
 		activeClass: string;
 		inactiveClass: string;
 	}> = [
 		{
-			label: 'Present',
+			label: 'Có mặt',
+			shortLabel: 'Có mặt',
 			value: 'present',
 			icon: 'icon-[mdi--check]',
 			activeClass: 'border-emerald-600 bg-emerald-600 text-white',
 			inactiveClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300'
 		},
 		{
-			label: 'Late',
+			label: 'Đi trễ',
+			shortLabel: 'Trễ',
 			value: 'late',
 			icon: 'icon-[mdi--clock-outline]',
 			activeClass: 'border-amber-500 bg-amber-500 text-white',
 			inactiveClass: 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300'
 		},
 		{
-			label: 'Excused',
+			label: 'Có phép',
+			shortLabel: 'Phép',
 			value: 'excused',
 			icon: 'icon-[mdi--email-outline]',
 			activeClass: 'border-sky-600 bg-sky-600 text-white',
 			inactiveClass: 'border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300'
 		},
 		{
-			label: 'Absent',
+			label: 'Về sớm',
+			shortLabel: 'Sớm',
+			value: 'left_early',
+			icon: 'icon-[mdi--exit-run]',
+			activeClass: 'border-cyan-600 bg-cyan-600 text-white',
+			inactiveClass: 'border-cyan-200 bg-cyan-50 text-cyan-700 hover:border-cyan-300'
+		},
+		{
+			label: 'Vắng',
+			shortLabel: 'Vắng',
 			value: 'absent',
 			icon: 'icon-[mdi--close]',
 			activeClass: 'border-rose-600 bg-rose-600 text-white',
@@ -140,12 +154,12 @@
 	let selectedGroupId = $state('');
 	let selectedGender = $state<Gender | ''>('');
 	let selectedBeltRankId = $state('');
+	let selectedAttendanceStatus = $state<AttendanceStatus | ''>('');
 	let setupClubId = $state('');
 	let setupDate = $state(getTodayIsoDate());
 	let setupNotes = $state('');
 	let isSetupModalOpen = $state(false);
 	let formErrors = $state<SessionFormErrors>({});
-	let isBootstrapping = $state(false);
 	let isLoadingDetail = $state(false);
 	let isCreating = $state(false);
 	let isApplyingBulk = $state(false);
@@ -159,6 +173,7 @@
 	let deleteTargetSessionId = $state('');
 	let showMobileDetail = $state(false);
 	let suppressLocalRefresh = $state(false);
+	let suppressSyncRefreshUntil = $state(0);
 	let sessionNoteDraft = $state('');
 	let selectedStudentNoteId = $state('');
 	let selectedStudentNoteName = $state('');
@@ -173,9 +188,9 @@
 	let avatarUrls = $state<Record<string, string>>({});
 
 	const studentStatusOptions = [
-		{ label: 'Active', value: 'active' },
-		{ label: 'Inactive', value: 'inactive' },
-		{ label: 'Suspended', value: 'suspended' }
+		{ label: 'Đang học', value: 'active' },
+		{ label: 'Ngưng học', value: 'inactive' },
+		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
 
 	const clubMap = $derived.by(() => new Map(clubs.map((club) => [club.id, club])));
@@ -198,12 +213,11 @@
 		);
 	});
 	const clubScheduleMap = $derived.by(() => {
-		const map = new Map<string, Weekday[]>();
+		const map: Record<string, Weekday[]> = {};
 		for (const schedule of clubSchedules) {
 			if (schedule.deletedAt || !schedule.isActive) continue;
-			const existing = map.get(schedule.clubId) ?? [];
-			existing.push(schedule.weekday);
-			map.set(schedule.clubId, existing);
+			const existing = map[schedule.clubId] ?? [];
+			map[schedule.clubId] = [...existing, schedule.weekday];
 		}
 		return map;
 	});
@@ -212,7 +226,7 @@
 		return availableGroupsForSession;
 	});
 	const availableStudentDetailTrainingDays = $derived.by(() =>
-		studentDetailForm.clubId ? (clubScheduleMap.get(studentDetailForm.clubId) ?? []) : []
+		studentDetailForm.clubId ? (clubScheduleMap[studentDetailForm.clubId] ?? []) : []
 	);
 	const availableBeltRanksForSession = $derived.by(() => {
 		const beltRankIds = new Set(items.map((item) => item.student.beltRankId).filter(Boolean));
@@ -240,7 +254,7 @@
 	});
 	const filteredItems = $derived.by(() => {
 		const query = normalizeSearchText(studentSearch);
-		return items.filter(({ student }) => {
+		return items.filter(({ student, record }) => {
 			const beltRankName = beltRankMap.get(student.beltRankId) ?? '';
 			const groupName = groupMap.get(student.groupId ?? '') ?? '';
 			const matchesQuery =
@@ -252,8 +266,10 @@
 			const matchesGroup = !selectedGroupId || student.groupId === selectedGroupId;
 			const matchesGender = !selectedGender || student.gender === selectedGender;
 			const matchesBeltRank = !selectedBeltRankId || student.beltRankId === selectedBeltRankId;
+			const matchesStatus =
+				!selectedAttendanceStatus || record.attendanceStatus === selectedAttendanceStatus;
 
-			return matchesQuery && matchesGroup && matchesGender && matchesBeltRank;
+			return matchesQuery && matchesGroup && matchesGender && matchesBeltRank && matchesStatus;
 		});
 	});
 	const summary = $derived.by<SummaryItem[]>(() => {
@@ -262,40 +278,54 @@
 			present: items.filter((item) => item.record.attendanceStatus === 'present').length,
 			late: items.filter((item) => item.record.attendanceStatus === 'late').length,
 			excused: items.filter((item) => item.record.attendanceStatus === 'excused').length,
+			leftEarly: items.filter((item) => item.record.attendanceStatus === 'left_early').length,
 			absent: items.filter((item) => item.record.attendanceStatus === 'absent').length
 		};
 
 		return [
 			{
-				label: 'Present',
+				status: 'present',
+				label: 'Có mặt',
 				value: counts.present,
 				tone: 'text-emerald-700',
 				icon: 'icon-[mdi--check-circle-outline]',
 				bgClass: 'bg-emerald-50 border-emerald-200'
 			},
 			{
-				label: 'Late',
+				status: 'late',
+				label: 'Đi trễ',
 				value: counts.late,
 				tone: 'text-amber-700',
 				icon: 'icon-[mdi--clock-outline]',
 				bgClass: 'bg-amber-50 border-amber-200'
 			},
 			{
-				label: 'Excused',
+				status: 'excused',
+				label: 'Có phép',
 				value: counts.excused,
 				tone: 'text-sky-700',
 				icon: 'icon-[mdi--email-outline]',
 				bgClass: 'bg-sky-50 border-sky-200'
 			},
 			{
-				label: 'Absent',
+				status: 'left_early',
+				label: 'Về sớm',
+				value: counts.leftEarly,
+				tone: 'text-cyan-700',
+				icon: 'icon-[mdi--exit-run]',
+				bgClass: 'bg-cyan-50 border-cyan-200'
+			},
+			{
+				status: 'absent',
+				label: 'Vắng',
 				value: counts.absent,
 				tone: 'text-rose-700',
 				icon: 'icon-[mdi--close-circle-outline]',
 				bgClass: 'bg-rose-50 border-rose-200'
 			},
 			{
-				label: 'Unmarked',
+				status: 'unmarked',
+				label: 'Chưa điểm danh',
 				value: counts.unmarked,
 				tone: 'text-slate-600',
 				icon: 'icon-[mdi--help-circle-outline]',
@@ -304,27 +334,44 @@
 		];
 	});
 	const sessionStatsMap = $derived.by(() => {
-		const map = new Map<
+		const map: Record<
 			string,
-			{ present: number; late: number; excused: number; absent: number; unmarked: number }
-		>();
+			{
+				present: number;
+				late: number;
+				excused: number;
+				left_early: number;
+				absent: number;
+				unmarked: number;
+			}
+		> = {};
 
 		for (const record of attendanceRecords) {
-			const current = map.get(record.sessionId) ?? {
+			const current = map[record.sessionId] ?? {
 				present: 0,
 				late: 0,
 				excused: 0,
+				left_early: 0,
 				absent: 0,
 				unmarked: 0
 			};
 			current[record.attendanceStatus] += 1;
-			map.set(record.sessionId, current);
+			map[record.sessionId] = current;
 		}
 
 		return map;
 	});
 	const hasClubs = $derived.by(() => availableClubs.length > 0);
 	const isCompleted = $derived.by(() => session?.status === 'completed');
+	const canReopenSelectedSession = $derived.by(() => {
+		if (!session || session.status !== 'completed') return true;
+		return session.sessionDate === getTodayIsoDate();
+	});
+	const sessionStatusToggleDisabled = $derived.by(() => {
+		if (isTogglingSessionStatus) return true;
+		if (session?.status === 'completed' && !canReopenSelectedSession) return true;
+		return false;
+	});
 
 	onMount(() => {
 		void loadInitialData();
@@ -335,6 +382,9 @@
 				return;
 			}
 			if (source === 'attendance') return;
+			if (source === 'sync' && Date.now() < suppressSyncRefreshUntil) {
+				return;
+			}
 			if (source === 'local' && suppressLocalRefresh) {
 				return;
 			}
@@ -342,21 +392,28 @@
 		});
 	});
 
+	function suppressSyncRefreshWindow(durationMs = 4000) {
+		suppressSyncRefreshUntil = Date.now() + durationMs;
+	}
+
 	$effect(() => {
-		filteredItems;
+		const _filtered = filteredItems;
+		if (_filtered) {
+			// no-op: keep dependency on filtered list for avatar preview refresh
+		}
 		void refreshVisibleAvatarPreviews();
 	});
 
 	async function loadInitialData() {
 		try {
-			isBootstrapping = true;
-			const [clubRows, clubGroupRows, beltRankRows, sessionRows, attendanceRecordRows] = await Promise.all([
-				clubUseCases.list(),
-				clubGroupUseCases.list(),
-				beltRankUseCases.list(),
-				attendanceUseCases.listSessions(),
-				attendanceUseCases.listRecords()
-			]);
+			const [clubRows, clubGroupRows, beltRankRows, sessionRows, attendanceRecordRows] =
+				await Promise.all([
+					clubUseCases.list(),
+					clubGroupUseCases.list(),
+					beltRankUseCases.list(),
+					attendanceUseCases.listSessions(),
+					attendanceUseCases.listRecords()
+				]);
 			const clubScheduleRows = (
 				await Promise.all(clubRows.map((club) => clubScheduleUseCases.listByClub(club.id)))
 			).flat();
@@ -375,21 +432,20 @@
 			setupNotes = '';
 			selectedSessionId = sessionRows[0]?.id ?? '';
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to load attendance data.');
-		} finally {
-			isBootstrapping = false;
+			toastError(error instanceof Error ? error.message : 'Không thể tải dữ liệu điểm danh.');
 		}
 		await loadSelectedSession();
 	}
 
 	async function refreshCurrentView() {
-		const [clubRows, clubGroupRows, beltRankRows, sessionRows, attendanceRecordRows] = await Promise.all([
-			clubUseCases.list(),
-			clubGroupUseCases.list(),
-			beltRankUseCases.list(),
-			attendanceUseCases.listSessions(),
-			attendanceUseCases.listRecords()
-		]);
+		const [clubRows, clubGroupRows, beltRankRows, sessionRows, attendanceRecordRows] =
+			await Promise.all([
+				clubUseCases.list(),
+				clubGroupUseCases.list(),
+				beltRankUseCases.list(),
+				attendanceUseCases.listSessions(),
+				attendanceUseCases.listRecords()
+			]);
 		const clubScheduleRows = (
 			await Promise.all(clubRows.map((club) => clubScheduleUseCases.listByClub(club.id)))
 		).flat();
@@ -429,6 +485,7 @@
 			selectedGroupId = '';
 			selectedGender = '';
 			selectedBeltRankId = '';
+			selectedAttendanceStatus = '';
 			return;
 		}
 
@@ -456,7 +513,7 @@
 			sessionClub = null;
 			items = [];
 			sessionNoteDraft = '';
-			toastError(error instanceof Error ? error.message : 'Failed to load attendance session.');
+			toastError(error instanceof Error ? error.message : 'Không thể tải buổi điểm danh.');
 		} finally {
 			isLoadingDetail = false;
 		}
@@ -481,11 +538,11 @@
 		const nextErrors: SessionFormErrors = {};
 
 		if (!setupClubId) {
-			nextErrors.clubId = 'Club is required.';
+			nextErrors.clubId = 'Vui lòng chọn CLB.';
 		}
 
 		if (!setupDate) {
-			nextErrors.sessionDate = 'Session date is required.';
+			nextErrors.sessionDate = 'Vui lòng chọn ngày điểm danh.';
 		}
 
 		formErrors = nextErrors;
@@ -507,9 +564,9 @@
 			selectedSessionId = createdSession.id;
 			showMobileDetail = true;
 			await loadSelectedSession();
-			toastSuccess('Attendance session created.');
+			toastSuccess('Đã tạo buổi điểm danh.');
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to create attendance session.');
+			toastError(error instanceof Error ? error.message : 'Không thể tạo buổi điểm danh.');
 		} finally {
 			isCreating = false;
 		}
@@ -526,12 +583,13 @@
 		try {
 			isApplyingBulk = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			await attendanceUseCases.markAllPresent(session.id);
 			applyMarkAllPresentLocally();
-			toastSuccess('All students marked as present.');
+			toastSuccess('Đã điểm danh có mặt cho tất cả võ sinh.');
 		} catch (error) {
 			toastError(
-				error instanceof Error ? error.message : 'Failed to mark all students as present.'
+				error instanceof Error ? error.message : 'Không thể điểm danh có mặt cho tất cả võ sinh.'
 			);
 		} finally {
 			suppressLocalRefresh = false;
@@ -543,19 +601,24 @@
 		if (!session) return;
 
 		try {
+			if (session.status === 'completed' && session.sessionDate !== getTodayIsoDate()) {
+				toastError('Chỉ có thể mở lại buổi điểm danh trong ngày.');
+				return;
+			}
 			isTogglingSessionStatus = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			if (session.status === 'completed') {
 				await attendanceUseCases.reopenSession(session.id);
 				applySessionStatusLocally('draft');
-				toastSuccess('Attendance session reopened.');
+				toastSuccess('Đã mở lại buổi điểm danh.');
 			} else {
 				await attendanceUseCases.completeSession(session.id);
 				applySessionStatusLocally('completed');
-				toastSuccess('Attendance session completed.');
+				toastSuccess('Đã chốt buổi điểm danh.');
 			}
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to update attendance session.');
+			toastError(error instanceof Error ? error.message : 'Không thể cập nhật buổi điểm danh.');
 		} finally {
 			suppressLocalRefresh = false;
 			isTogglingSessionStatus = false;
@@ -566,11 +629,12 @@
 		try {
 			isDeletingSession = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			await attendanceUseCases.deleteSession(sessionId);
 			applyDeleteSessionLocally(sessionId);
-			toastSuccess('Attendance session deleted.');
+			toastSuccess('Đã xóa buổi điểm danh.');
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to delete attendance session.');
+			toastError(error instanceof Error ? error.message : 'Không thể xóa buổi điểm danh.');
 		} finally {
 			suppressLocalRefresh = false;
 			isDeletingSession = false;
@@ -583,11 +647,12 @@
 		try {
 			isSavingSessionNotes = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			await attendanceUseCases.updateSessionNotes(session.id, sessionNoteDraft);
 			applySessionNotesLocally(sessionNoteDraft);
-			toastSuccess('Session note updated.');
+			toastSuccess('Đã cập nhật ghi chú buổi học.');
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to update session note.');
+			toastError(error instanceof Error ? error.message : 'Không thể cập nhật ghi chú buổi học.');
 		} finally {
 			suppressLocalRefresh = false;
 			isSavingSessionNotes = false;
@@ -617,6 +682,7 @@
 		try {
 			isChangingStatus = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			await attendanceUseCases.updateAttendance({
 				sessionId: session.id,
 				studentId,
@@ -624,7 +690,9 @@
 			});
 			applyAttendanceStatusLocally(studentId, attendanceStatus);
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to update attendance status.');
+			toastError(
+				error instanceof Error ? error.message : 'Không thể cập nhật trạng thái điểm danh.'
+			);
 		} finally {
 			suppressLocalRefresh = false;
 			isChangingStatus = false;
@@ -685,9 +753,9 @@
 			groups: availableStudentDetailGroups,
 			availableClubTrainingDays: availableStudentDetailTrainingDays,
 			selectedCustomScheduleDays: studentDetailCustomScheduleDays,
-			joinedAtBeforeBirthMessage: 'Joined date must be on or after date of birth.',
-			invalidPhoneMessage: 'Phone number is invalid.',
-			invalidEmailMessage: 'Email is invalid.'
+			joinedAtBeforeBirthMessage: 'Ngày tham gia phải bằng hoặc sau ngày sinh.',
+			invalidPhoneMessage: 'Số điện thoại không hợp lệ.',
+			invalidEmailMessage: 'Email không hợp lệ.'
 		});
 		studentDetailForm = result.form;
 		studentDetailErrors = result.errors;
@@ -721,10 +789,10 @@
 				studentDetailCustomScheduleDays
 			);
 			applyStudentDetailsLocally(selectedStudentDetailId, studentDetailForm);
-			toastSuccess('Student updated.');
+			toastSuccess('Đã cập nhật võ sinh.');
 			closeStudentDetailModal();
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to update student.');
+			toastError(error instanceof Error ? error.message : 'Không thể cập nhật võ sinh.');
 		} finally {
 			suppressLocalRefresh = false;
 			isSavingStudentDetail = false;
@@ -737,6 +805,7 @@
 		try {
 			isSavingStudentNote = true;
 			suppressLocalRefresh = true;
+			suppressSyncRefreshWindow();
 			await attendanceUseCases.updateAttendance({
 				sessionId: session.id,
 				studentId: selectedStudentNoteId,
@@ -746,10 +815,10 @@
 				notes: studentNoteDraft
 			});
 			applyAttendanceNoteLocally(selectedStudentNoteId, studentNoteDraft);
-			toastSuccess('Student note updated.');
+			toastSuccess('Đã cập nhật ghi chú võ sinh.');
 			closeStudentNoteModal();
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to update student note.');
+			toastError(error instanceof Error ? error.message : 'Không thể cập nhật ghi chú võ sinh.');
 		} finally {
 			suppressLocalRefresh = false;
 			isSavingStudentNote = false;
@@ -764,6 +833,7 @@
 		selectedSessionId = sessionId;
 		showMobileDetail = true;
 		studentSearch = '';
+		selectedAttendanceStatus = '';
 		void loadSelectedSession();
 	}
 
@@ -778,7 +848,29 @@
 	}
 
 	function getSessionStatusLabel(value?: AttendanceSession['status']): string {
-		return value === 'completed' ? 'Completed' : 'Draft';
+		return value === 'completed' ? 'Đã chốt' : 'Bản nháp';
+	}
+
+	function handleSummaryStatusFilter(status: AttendanceStatus) {
+		selectedAttendanceStatus = selectedAttendanceStatus === status ? '' : status;
+	}
+
+	function getSummaryActiveClass(status: AttendanceStatus): string {
+		switch (status) {
+			case 'present':
+				return 'border-emerald-700 bg-emerald-700 text-white';
+			case 'late':
+				return 'border-amber-600 bg-amber-600 text-white';
+			case 'excused':
+				return 'border-sky-700 bg-sky-700 text-white';
+			case 'left_early':
+				return 'border-cyan-700 bg-cyan-700 text-white';
+			case 'absent':
+				return 'border-rose-700 bg-rose-700 text-white';
+			case 'unmarked':
+			default:
+				return 'border-slate-700 bg-slate-700 text-white';
+		}
 	}
 
 	function applyAttendanceStatusLocally(studentId: string, attendanceStatus: AttendanceStatus) {
@@ -803,7 +895,8 @@
 				? {
 						...record,
 						attendanceStatus,
-						checkInAt: attendanceStatus === 'present' || attendanceStatus === 'late' ? now : undefined,
+						checkInAt:
+							attendanceStatus === 'present' || attendanceStatus === 'late' ? now : undefined,
 						updatedAt: now,
 						lastModifiedAt: now,
 						syncStatus: 'pending',
@@ -986,20 +1079,20 @@
 </script>
 
 <main class="mx-auto max-w-7xl space-y-8 px-4 py-8">
-	<PageHeader eyebrow="Attendance" title="Daily attendance" description="">
+	<PageHeader eyebrow="Điểm danh" title="Điểm danh hằng ngày" description="">
 		{#snippet actions()}
 			<IconActionButton
 				icon="icon-[mdi--plus]"
-				label="Add attendance session"
+				label="Tạo buổi điểm danh"
 				variant="primary"
 				onclick={openSetupModal}
-				tooltipText={{ text: 'Add attendance session', placement: 'bottom' }}
+				tooltipText={{ text: 'Tạo buổi điểm danh', placement: 'bottom' }}
 			/>
 			{#if showMobileDetail}
 				<div class="xl:hidden">
 					<IconActionButton
 						icon="icon-[mdi--arrow-left]"
-						label="Back to sessions"
+						label="Quay lại danh sách"
 						onclick={backToSessionList}
 					/>
 				</div>
@@ -1010,35 +1103,35 @@
 	<section class="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
 		<div class:hidden={showMobileDetail} class:xl:block={showMobileDetail}>
 			<SectionCard
-				title="Sessions"
-				description="Newest sessions appear first. Click one to view detail."
+				title="Danh sách buổi điểm danh"
+				description="Buổi mới nhất hiển thị trước. Chọn một buổi để xem chi tiết."
 			>
 				<div class="space-y-4">
 					<div class="grid gap-2 sm:grid-cols-2">
 						<input
 							type="search"
 							class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-							placeholder="Search by club or date"
+							placeholder="Tìm theo CLB hoặc ngày"
 							bind:value={sessionSearch}
 						/>
-						<AppDatePicker bind:value={sessionDateFilter} placeholder="Filter by date" />
+						<AppDatePicker bind:value={sessionDateFilter} placeholder="Lọc theo ngày" />
 					</div>
 
 					{#if !hasClubs}
 						<EmptyState
-							title="No clubs available"
-							description="Create and sync at least one active club before creating attendance sessions."
+							title="Chưa có CLB"
+							description="Hãy tạo và đồng bộ ít nhất một CLB đang hoạt động trước khi tạo buổi điểm danh."
 						/>
 					{:else if filteredSessions.length === 0}
 						<EmptyState
-							title="No attendance sessions yet"
-							description="Use the add button to create the first session for a club."
+							title="Chưa có buổi điểm danh"
+							description="Bấm nút thêm để tạo buổi điểm danh đầu tiên cho CLB."
 						/>
 					{:else}
 						<div class="space-y-3">
 							{#each filteredSessions as sessionItem (sessionItem.id)}
 								{@const club = clubMap.get(sessionItem.clubId)}
-								{@const sessionStats = sessionStatsMap.get(sessionItem.id)}
+								{@const sessionStats = sessionStatsMap[sessionItem.id]}
 								<button
 									type="button"
 									class={`w-full rounded-2xl border px-4 py-4 text-left transition ${
@@ -1051,17 +1144,21 @@
 									<div class="flex items-start justify-between gap-3">
 										<div class="min-w-0">
 											<p class="truncate text-base font-semibold">
-												{club?.name ?? 'Unknown club'}
+												{club?.name ?? 'CLB không xác định'}
 											</p>
 											<p
 												class={`mt-1 text-sm ${selectedSessionId === sessionItem.id ? 'text-white/75' : 'text-slate-500'}`}
 											>
-												{formatWeekdayLabel(sessionItem.sessionDate)} • {formatDateLabel(sessionItem.sessionDate)}
+												{formatWeekdayLabel(sessionItem.sessionDate)} • {formatDateLabel(
+													sessionItem.sessionDate
+												)}
 											</p>
 											{#if sessionItem.notes}
 												<p
 													class={`mt-2 line-clamp-2 text-sm ${
-														selectedSessionId === sessionItem.id ? 'text-white/70' : 'text-slate-600'
+														selectedSessionId === sessionItem.id
+															? 'text-white/70'
+															: 'text-slate-600'
 													}`}
 												>
 													{sessionItem.notes}
@@ -1076,7 +1173,7 @@
 																: 'border border-emerald-200 bg-emerald-50 text-emerald-700'
 														}`}
 													>
-														P {sessionStats.present}
+														Có mặt {sessionStats.present}
 													</span>
 													<span
 														class={`rounded-full px-2 py-1 text-[11px] font-medium ${
@@ -1085,7 +1182,7 @@
 																: 'border border-amber-200 bg-amber-50 text-amber-700'
 														}`}
 													>
-														L {sessionStats.late}
+														Trễ {sessionStats.late}
 													</span>
 													<span
 														class={`rounded-full px-2 py-1 text-[11px] font-medium ${
@@ -1094,7 +1191,16 @@
 																: 'border border-sky-200 bg-sky-50 text-sky-700'
 														}`}
 													>
-														E {sessionStats.excused}
+														Phép {sessionStats.excused}
+													</span>
+													<span
+														class={`rounded-full px-2 py-1 text-[11px] font-medium ${
+															selectedSessionId === sessionItem.id
+																? 'bg-cyan-500/15 text-cyan-100'
+																: 'border border-cyan-200 bg-cyan-50 text-cyan-700'
+														}`}
+													>
+														Về sớm {sessionStats.left_early}
 													</span>
 													<span
 														class={`rounded-full px-2 py-1 text-[11px] font-medium ${
@@ -1103,7 +1209,7 @@
 																: 'border border-rose-200 bg-rose-50 text-rose-700'
 														}`}
 													>
-														A {sessionStats.absent}
+														Vắng {sessionStats.absent}
 													</span>
 													<span
 														class={`rounded-full px-2 py-1 text-[11px] font-medium ${
@@ -1112,13 +1218,13 @@
 																: 'border border-slate-200 bg-slate-50 text-slate-600'
 														}`}
 													>
-														U {sessionStats.unmarked}
+														Chưa {sessionStats.unmarked}
 													</span>
 												</div>
 											{/if}
 										</div>
 										<span
-											class={`rounded-full px-2.5 py-1 text-xs font-medium ${
+											class={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-center text-xs font-medium ${
 												selectedSessionId === sessionItem.id
 													? 'bg-white/14 text-white'
 													: sessionItem.status === 'completed'
@@ -1139,8 +1245,8 @@
 
 		{#if isLoadingDetail}
 			<div class:hidden={!showMobileDetail} class:xl:block={!showMobileDetail}>
-				<SectionCard title="Session detail" description="Loading selected session">
-					<p class="text-sm text-slate-500">Loading attendance detail...</p>
+				<SectionCard title="Chi tiết buổi điểm danh" description="Đang tải dữ liệu">
+					<p class="text-sm text-slate-500">Đang tải chi tiết điểm danh...</p>
 				</SectionCard>
 			</div>
 		{:else if session && sessionClub}
@@ -1152,7 +1258,7 @@
 			>
 				<SectionCard
 					title={sessionClub.name}
-					description={`Attendance for ${formatDateLabel(currentSession.sessionDate)}`}
+					description={`Điểm danh ngày ${formatDateLabel(currentSession.sessionDate)}`}
 				>
 					{#snippet actions()}
 						<div class="flex flex-wrap items-center gap-2">
@@ -1171,7 +1277,7 @@
 								onclick={handleMarkAllPresent}
 								disabled={isCompleted || isApplyingBulk || isChangingStatus}
 							>
-								{isApplyingBulk ? 'Applying...' : 'Mark all present'}
+								{isApplyingBulk ? 'Đang cập nhật...' : 'Điểm danh có mặt tất cả'}
 							</button>
 							<button
 								type="button"
@@ -1179,16 +1285,19 @@
 									isCompleted
 										? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
 										: 'bg-slate-900 text-white hover:bg-slate-800'
-								}`}
+								} disabled:opacity-60`}
 								onclick={handleSessionStatusToggle}
-								disabled={isTogglingSessionStatus}
+								disabled={sessionStatusToggleDisabled}
+								title={isCompleted && !canReopenSelectedSession
+									? 'Chỉ có thể mở lại buổi điểm danh trong ngày.'
+									: undefined}
 							>
 								{#if isTogglingSessionStatus}
-									Saving...
+									Đang lưu...
 								{:else if isCompleted}
-									Reopen session
+									Mở lại buổi
 								{:else}
-									Complete session
+									Chốt buổi
 								{/if}
 							</button>
 							<button
@@ -1197,73 +1306,56 @@
 								onclick={() => openDeleteConfirm(currentSession.id)}
 								disabled={isDeletingSession}
 							>
-								{isDeletingSession ? 'Deleting...' : 'Delete session'}
+								{isDeletingSession ? 'Đang xóa...' : 'Xóa buổi'}
 							</button>
 						</div>
 					{/snippet}
-
-					<div class="hidden gap-4 md:grid md:grid-cols-5">
-						{#each summary as item (item.label)}
-							<article class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-								<p class="text-sm font-medium text-slate-500">{item.label}</p>
-								<p class={`mt-2 text-3xl font-bold ${item.tone}`}>{item.value}</p>
-							</article>
-						{/each}
-					</div>
 				</SectionCard>
 
-				<SectionCard
-					title="Session note"
-					description="Keep quick context for this attendance session."
-				>
-					<div class="space-y-3">
-						<textarea
-							class="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-							placeholder="Add a note for this session"
-							bind:value={sessionNoteDraft}
-						></textarea>
-						<div class="flex justify-end">
+				<div class="sticky top-3 z-10 px-1 py-1 md:hidden">
+					<div class="grid grid-cols-3 gap-2">
+						{#each summary as item (item.label)}
 							<button
 								type="button"
-								class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-								onclick={handleSaveSessionNotes}
-								disabled={isSavingSessionNotes || sessionNoteDraft === (session?.notes ?? '')}
-							>
-								{isSavingSessionNotes ? 'Saving...' : 'Save note'}
-							</button>
-						</div>
-					</div>
-				</SectionCard>
-
-				<div class="sticky top-3 z-10 -mx-1 overflow-x-auto px-1 pb-1 md:hidden">
-					<div class="flex min-w-max gap-2">
-						{#each summary as item (item.label)}
-							<div
-								class={`flex items-center gap-2 rounded-full border px-3 py-2 shadow-sm ${item.bgClass}`}
+								class={`flex min-w-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border px-2 py-2 shadow-sm transition ${
+									selectedAttendanceStatus === item.status
+										? getSummaryActiveClass(item.status)
+										: item.bgClass
+								}`}
 								aria-label={`${item.label}: ${item.value}`}
-								title={`${item.label}: ${item.value}`}
+								title={`${item.label}: ${item.value}${selectedAttendanceStatus === item.status ? ' (đang lọc)' : ''}`}
+								onclick={() => handleSummaryStatusFilter(item.status)}
 							>
-								<span class={`${item.icon} size-4 ${item.tone}`}></span>
-								<span class={`text-sm font-semibold ${item.tone}`}>{item.value}</span>
-							</div>
+								<span
+									class={`${item.icon} size-4 ${selectedAttendanceStatus === item.status ? 'text-white' : item.tone}`}
+								></span>
+								<span
+									class={`truncate text-xs font-semibold ${selectedAttendanceStatus === item.status ? 'text-white' : item.tone}`}
+								>
+									{item.value}
+								</span>
+							</button>
 						{/each}
 					</div>
 				</div>
 
-				<SectionCard title="Attendance sheet" description="Update each student in place.">
+				<SectionCard
+					title="Bảng điểm danh"
+					description="Cập nhật trạng thái trực tiếp cho từng võ sinh."
+				>
 					{#snippet actions()}
 						<div class="grid w-full gap-2 md:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
 							<input
 								type="search"
 								class="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 xl:w-64"
-								placeholder="Search student or belt rank"
+								placeholder="Tìm võ sinh hoặc cấp đai"
 								bind:value={studentSearch}
 							/>
 							<select
 								class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 xl:w-48"
 								bind:value={selectedGroupId}
 							>
-								<option value="">All groups</option>
+								<option value="">Tất cả nhóm</option>
 								{#each availableGroupsForSession as group (group.id)}
 									<option value={group.id}>{group.name}</option>
 								{/each}
@@ -1272,15 +1364,15 @@
 								class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 xl:w-40"
 								bind:value={selectedGender}
 							>
-								<option value="">All genders</option>
-								<option value="male">Male</option>
-								<option value="female">Female</option>
+								<option value="">Tất cả giới tính</option>
+								<option value="male">Nam</option>
+								<option value="female">Nữ</option>
 							</select>
 							<select
 								class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 xl:w-48"
 								bind:value={selectedBeltRankId}
 							>
-								<option value="">All belt ranks</option>
+								<option value="">Tất cả cấp đai</option>
 								{#each availableBeltRanksForSession as beltRank (beltRank.id)}
 									<option value={beltRank.id}>{beltRank.name}</option>
 								{/each}
@@ -1288,15 +1380,41 @@
 						</div>
 					{/snippet}
 
+					<div class="mb-4 hidden gap-3 p-1 md:sticky md:top-20 md:z-20 md:grid md:grid-cols-5">
+						{#each summary as item (item.label)}
+							<button
+								type="button"
+								class={`rounded-2xl border px-3 py-2 text-left shadow-sm transition ${
+									selectedAttendanceStatus === item.status
+										? getSummaryActiveClass(item.status)
+										: item.bgClass
+								}`}
+								onclick={() => handleSummaryStatusFilter(item.status)}
+								aria-pressed={selectedAttendanceStatus === item.status}
+							>
+								<p
+									class={`text-xs font-medium ${selectedAttendanceStatus === item.status ? 'text-white/85' : 'text-slate-500'}`}
+								>
+									{item.label}
+								</p>
+								<p
+									class={`mt-1 text-2xl font-bold ${selectedAttendanceStatus === item.status ? 'text-white' : item.tone}`}
+								>
+									{item.value}
+								</p>
+							</button>
+						{/each}
+					</div>
+
 					{#if items.length === 0}
 						<EmptyState
-							title="No active students in this club"
-							description="Only active students are loaded into a new attendance session."
+							title="CLB chưa có võ sinh đang hoạt động"
+							description="Chỉ võ sinh đang hoạt động mới được nạp vào buổi điểm danh mới."
 						/>
 					{:else if filteredItems.length === 0}
 						<EmptyState
-							title="No matching students"
-							description="Adjust the search query to view more rows."
+							title="Không có kết quả phù hợp"
+							description="Thử thay đổi điều kiện tìm kiếm hoặc bộ lọc."
 						/>
 					{:else}
 						<div class="space-y-3">
@@ -1304,39 +1422,57 @@
 								<div class="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
 									<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 										<div class="flex min-w-0 items-start gap-3">
-											<StudentAvatarThumb
-												name={item.student.fullName}
-												src={avatarUrls[item.student.id]}
-												sizeClass="size-12"
-											/>
+											<button
+												type="button"
+												class="cursor-pointer rounded-full"
+												onclick={() => void openStudentDetailModal(item)}
+												aria-label="Sửa thông tin võ sinh"
+												title="Sửa thông tin võ sinh"
+												use:tooltip={{ text: 'Sửa thông tin võ sinh', placement: 'top' }}
+											>
+												<StudentAvatarThumb
+													name={item.student.fullName}
+													src={avatarUrls[item.student.id]}
+													sizeClass="size-12"
+												/>
+											</button>
 											<div class="min-w-0">
 												<div class="flex flex-wrap items-center gap-2">
-													<p class="truncate text-base font-semibold text-slate-900">
+													<button
+														type="button"
+														class="cursor-pointer truncate text-left text-base font-semibold text-slate-900 transition hover:text-slate-700 hover:underline"
+														onclick={() => void openStudentDetailModal(item)}
+														aria-label={`Sửa thông tin võ sinh ${item.student.fullName}`}
+														title="Sửa thông tin võ sinh"
+														use:tooltip={{ text: 'Sửa thông tin võ sinh', placement: 'top' }}
+													>
 														{item.student.fullName}
-													</p>
-												{#if item.student.studentCode}
-													<span
-														class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500"
-													>
-														{item.student.studentCode}
-													</span>
-												{/if}
-												{#if item.record.notes}
-													<span
-														class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
-													>
-														Note
-													</span>
-												{/if}
-											</div>
+													</button>
+													{#if item.student.studentCode}
+														<span
+															class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500"
+														>
+															{item.student.studentCode}
+														</span>
+													{/if}
+													{#if item.record.notes}
+														<span
+															class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
+														>
+															Ghi chú
+														</span>
+													{/if}
+												</div>
 												<p class="mt-1 text-sm text-slate-500">
 													{#if item.student.groupId}
-														{groupMap.get(item.student.groupId) ?? 'Unknown group'} •
+														{groupMap.get(item.student.groupId) ?? 'Nhóm không xác định'} •
 													{/if}
-													{beltRankMap.get(item.student.beltRankId) ?? 'Unknown belt rank'}
+													{beltRankMap.get(item.student.beltRankId) ?? 'Cấp đai không xác định'}
 												</p>
 												{#if item.record.notes}
-													<p class="mt-2 line-clamp-2 text-sm text-slate-600">{item.record.notes}</p>
+													<p class="mt-2 line-clamp-2 text-sm text-slate-600">
+														{item.record.notes}
+													</p>
 												{/if}
 											</div>
 										</div>
@@ -1344,24 +1480,18 @@
 										<div class="flex flex-wrap gap-2">
 											<button
 												type="button"
-												class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-												onclick={() => void openStudentDetailModal(item)}
-											>
-												<span class="mr-1.5 icon-[mdi--account-edit-outline] size-4"></span>
-												Student
-											</button>
-											<button
-												type="button"
-												class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+												class="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
 												onclick={() => openStudentNoteModal(item)}
+												aria-label="Ghi chú võ sinh"
+												title="Ghi chú võ sinh"
+												use:tooltip={{ text: 'Ghi chú võ sinh', placement: 'top' }}
 											>
-												<span class="mr-1.5 icon-[mdi--note-text-outline] size-4"></span>
-												Note
+												<span class="icon-[mdi--note-text-outline] size-4"></span>
 											</button>
 											{#each attendanceStatuses as statusOption (statusOption.value)}
 												<button
 													type="button"
-													class={`inline-flex size-10 items-center justify-center rounded-full border text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${getStatusButtonClass(item.record.attendanceStatus, statusOption.value)}`}
+													class={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${getStatusButtonClass(item.record.attendanceStatus, statusOption.value)}`}
 													onclick={() => handleStatusChange(item.student.id, statusOption.value)}
 													disabled={isCompleted || isChangingStatus}
 													aria-label={statusOption.label}
@@ -1369,6 +1499,7 @@
 													use:tooltip={{ text: statusOption.label, placement: 'top' }}
 												>
 													<span class={`${statusOption.icon} size-4`}></span>
+													<span>{statusOption.shortLabel}</span>
 												</button>
 											{/each}
 										</div>
@@ -1377,14 +1508,41 @@
 							{/each}
 						</div>
 					{/if}
+
+					<div class="mt-4 border-t border-slate-200 pt-4">
+						<label for="session-note-inline" class="mb-2 block text-sm font-medium text-slate-700"
+							>Ghi chú buổi học</label
+						>
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+							<input
+								id="session-note-inline"
+								type="text"
+								class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+								placeholder="Thêm ghi chú ngắn cho buổi học"
+								bind:value={sessionNoteDraft}
+								maxlength="180"
+							/>
+							<button
+								type="button"
+								class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
+								onclick={handleSaveSessionNotes}
+								disabled={isSavingSessionNotes || sessionNoteDraft === (session?.notes ?? '')}
+							>
+								{isSavingSessionNotes ? 'Đang lưu...' : 'Lưu'}
+							</button>
+						</div>
+					</div>
 				</SectionCard>
 			</section>
 		{:else}
 			<div class:hidden={!showMobileDetail} class:xl:block={!showMobileDetail}>
-				<SectionCard title="Session detail" description="Choose a session from the left side.">
+				<SectionCard
+					title="Chi tiết buổi điểm danh"
+					description="Hãy chọn một buổi ở danh sách bên trái."
+				>
 					<EmptyState
-						title="No session selected"
-						description="Pick a session to start marking attendance, or create a new session for today."
+						title="Chưa chọn buổi điểm danh"
+						description="Chọn một buổi để bắt đầu điểm danh, hoặc tạo buổi mới cho hôm nay."
 					/>
 				</SectionCard>
 			</div>
@@ -1394,21 +1552,21 @@
 
 <AppModal
 	open={isSetupModalOpen}
-	title="Setup attendance session"
-	description="Create a new attendance session. The app will preload all active students in the selected club."
+	title="Tạo buổi điểm danh"
+	description="Tạo buổi điểm danh mới. Hệ thống sẽ nạp sẵn võ sinh đang hoạt động trong CLB đã chọn."
 	size="md"
 	allowOverflow={true}
 	onClose={closeSetupModal}
 >
 	<form class="space-y-4" onsubmit={handleCreateSessionSubmit}>
 		<label class="space-y-2">
-			<span class="text-sm font-medium text-slate-700">Club *</span>
+			<span class="text-sm font-medium text-slate-700">CLB *</span>
 			<select
 				class:border-red-300={!!formErrors.clubId}
 				class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
 				bind:value={setupClubId}
 			>
-				<option value="">Select a club</option>
+				<option value="">Chọn CLB</option>
 				{#each availableClubs as club (club.id)}
 					<option value={club.id}>{club.name}</option>
 				{/each}
@@ -1419,18 +1577,18 @@
 		</label>
 
 		<label class="space-y-2">
-			<span class="text-sm font-medium text-slate-700">Session date *</span>
-			<AppDatePicker bind:value={setupDate} placeholder="Select date" />
+			<span class="text-sm font-medium text-slate-700">Ngày điểm danh *</span>
+			<AppDatePicker bind:value={setupDate} placeholder="Chọn ngày" />
 			{#if formErrors.sessionDate}
 				<span class="block text-xs text-red-600">{formErrors.sessionDate}</span>
 			{/if}
 		</label>
 
 		<label class="space-y-2">
-			<span class="text-sm font-medium text-slate-700">Note</span>
+			<span class="text-sm font-medium text-slate-700">Ghi chú</span>
 			<textarea
 				class="min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-				placeholder="Add a note for this session"
+				placeholder="Thêm ghi chú cho buổi học"
 				bind:value={setupNotes}
 			></textarea>
 		</label>
@@ -1441,14 +1599,14 @@
 				class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
 				onclick={closeSetupModal}
 			>
-				Cancel
+				Hủy
 			</button>
 			<button
 				type="submit"
 				class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
 				disabled={!hasClubs || isCreating}
 			>
-				{isCreating ? 'Creating...' : 'Create session'}
+				{isCreating ? 'Đang tạo...' : 'Tạo buổi'}
 			</button>
 		</div>
 	</form>
@@ -1456,15 +1614,15 @@
 
 <AppModal
 	open={isDeleteConfirmOpen}
-	title="Delete attendance session"
-	description="This will remove the selected attendance session and all attendance records inside it from the current device."
+	title="Xóa buổi điểm danh"
+	description="Thao tác này sẽ xóa buổi điểm danh đã chọn và toàn bộ chi tiết điểm danh trên thiết bị hiện tại."
 	size="sm"
 	onClose={closeDeleteConfirm}
 >
 	<div class="space-y-4">
 		<p class="text-sm text-slate-600">
-			This action cannot be undone from the attendance screen. Continue only if you want to remove
-			the whole session.
+			Bạn sẽ không thể hoàn tác trực tiếp từ màn hình điểm danh. Chỉ tiếp tục nếu muốn xóa toàn bộ
+			buổi học.
 		</p>
 		<div class="flex justify-end gap-3">
 			<button
@@ -1472,7 +1630,7 @@
 				class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
 				onclick={closeDeleteConfirm}
 			>
-				Cancel
+				Hủy
 			</button>
 			<button
 				type="button"
@@ -1480,7 +1638,7 @@
 				onclick={handleConfirmDeleteSession}
 				disabled={isDeletingSession}
 			>
-				Confirm delete
+				Xác nhận xóa
 			</button>
 		</div>
 	</div>
@@ -1488,8 +1646,8 @@
 
 <StudentFormModal
 	open={isStudentDetailModalOpen}
-	title="Student detail"
-	description="Update the student directly from the attendance sheet."
+	title="Chi tiết võ sinh"
+	description="Cập nhật thông tin võ sinh trực tiếp từ bảng điểm danh."
 	studentId={selectedStudentDetailId}
 	bind:form={studentDetailForm}
 	errors={studentDetailErrors}
@@ -1499,29 +1657,29 @@
 	availableClubTrainingDays={availableStudentDetailTrainingDays}
 	onClose={closeStudentDetailModal}
 	onSubmit={() => void handleSaveStudentDetail()}
-	submitLabel="Save student"
+	submitLabel="Lưu võ sinh"
 	isSubmitting={isSavingStudentDetail}
 	showScheduleSection={true}
 	showClubSelector={false}
 	clubReadonlyName={sessionClub?.name ?? ''}
 	showStatusField={true}
-	studentCodeDisplay={selectedStudentDetailCode || 'Generated on sync'}
+	studentCodeDisplay={selectedStudentDetailCode || 'Sẽ tạo khi đồng bộ'}
 	statusOptions={[...studentStatusOptions]}
 />
 
 <AppModal
 	open={isStudentNoteModalOpen}
-	title="Student note"
+	title="Ghi chú võ sinh"
 	description={selectedStudentNoteName
-		? `Add a note for ${selectedStudentNoteName}.`
-		: 'Add a note for this student.'}
+		? `Thêm ghi chú cho ${selectedStudentNoteName}.`
+		: 'Thêm ghi chú cho võ sinh này.'}
 	size="md"
 	onClose={closeStudentNoteModal}
 >
 	<div class="space-y-4">
 		<textarea
 			class="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-			placeholder="Write a note for this student"
+			placeholder="Nhập ghi chú cho võ sinh"
 			bind:value={studentNoteDraft}
 		></textarea>
 		<div class="flex justify-end gap-3">
@@ -1530,7 +1688,7 @@
 				class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
 				onclick={closeStudentNoteModal}
 			>
-				Cancel
+				Hủy
 			</button>
 			<button
 				type="button"
@@ -1538,7 +1696,7 @@
 				onclick={handleSaveStudentNote}
 				disabled={isSavingStudentNote}
 			>
-				{isSavingStudentNote ? 'Saving...' : 'Save note'}
+				{isSavingStudentNote ? 'Đang lưu...' : 'Lưu ghi chú'}
 			</button>
 		</div>
 	</div>

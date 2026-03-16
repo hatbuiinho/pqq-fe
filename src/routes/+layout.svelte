@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { AppModal, avatarUploadManager, getDB, syncManager, syncStatus, subscribeDataChanged } from '$lib';
+	import {
+		AppModal,
+		avatarUploadManager,
+		getDB,
+		syncManager,
+		syncStatus,
+		subscribeDataChanged
+	} from '$lib';
 	import type {
 		AttendanceRecord,
 		AttendanceSession,
@@ -31,7 +39,7 @@
 			title: string;
 			detail?: string;
 			syncError?: string;
-			href: string;
+			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance';
 		}>
 	>([]);
 	let { children } = $props();
@@ -45,34 +53,39 @@
 		lastError: undefined as string | undefined
 	});
 
-	const navItems = [
+	const navItems: Array<{
+		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance';
+		label: string;
+		icon: string;
+		accent: string;
+	}> = [
 		{
 			href: '/',
-			label: 'Dashboard',
+			label: 'Tổng quan',
 			icon: 'icon-[mdi--view-dashboard-outline]',
 			accent: 'from-[#65c7cb] to-[#3f8f93]'
 		},
 		{
 			href: '/clubs',
-			label: 'Clubs',
+			label: 'Câu lạc bộ',
 			icon: 'icon-[mdi--account-group-outline]',
 			accent: 'from-[#5f82b8] to-[#3f8f93]'
 		},
 		{
 			href: '/belt-ranks',
-			label: 'Belt Ranks',
+			label: 'Cấp đai',
 			icon: 'icon-[mdi--karate]',
 			accent: 'from-[#7bc3c6] to-[#5f82b8]'
 		},
 		{
 			href: '/students',
-			label: 'Students',
+			label: 'Võ sinh',
 			icon: 'icon-[mdi--account-school-outline]',
 			accent: 'from-[#65c7cb] to-[#5f82b8]'
 		},
 		{
 			href: '/attendance',
-			label: 'Attendance',
+			label: 'Điểm danh',
 			icon: 'icon-[mdi--clipboard-check-outline]',
 			accent: 'from-[#7bc3c6] to-[#4d7ca6]'
 		}
@@ -96,18 +109,18 @@
 	}
 
 	function getSyncLabel(): string {
-		if (!syncSnapshot.online) return 'Offline';
-		if (syncSnapshot.isSyncing) return 'Syncing...';
-		if (syncSnapshot.lastError) return 'Sync error';
-		if (syncSnapshot.connectionState === 'connected') return 'Realtime connected';
-		return 'Ready for sync';
+		if (!syncSnapshot.online) return 'Ngoại tuyến';
+		if (syncSnapshot.isSyncing) return 'Đang đồng bộ...';
+		if (syncSnapshot.lastError) return 'Lỗi đồng bộ';
+		if (syncSnapshot.connectionState === 'connected') return 'Realtime đã kết nối';
+		return 'Sẵn sàng đồng bộ';
 	}
 
 	function formatLastSync(value?: string): string {
-		if (!value) return 'Never synced';
+		if (!value) return 'Chưa từng đồng bộ';
 
 		const date = new Date(value);
-		if (Number.isNaN(date.getTime())) return 'Never synced';
+		if (Number.isNaN(date.getTime())) return 'Chưa từng đồng bộ';
 
 		return date.toLocaleString();
 	}
@@ -118,14 +131,15 @@
 		try {
 			isLoadingSyncIssues = true;
 			const db = getDB();
-			const [clubs, clubGroups, beltRanks, students, attendanceSessions, attendanceRecords] = await Promise.all([
-				db.clubs.where('syncStatus').equals('failed').toArray(),
-				db.clubGroups.where('syncStatus').equals('failed').toArray(),
-				db.beltRanks.where('syncStatus').equals('failed').toArray(),
-				db.students.where('syncStatus').equals('failed').toArray(),
-				db.attendanceSessions.where('syncStatus').equals('failed').toArray(),
-				db.attendanceRecords.where('syncStatus').equals('failed').toArray()
-			]);
+			const [clubs, clubGroups, beltRanks, students, attendanceSessions, attendanceRecords] =
+				await Promise.all([
+					db.clubs.where('syncStatus').equals('failed').toArray(),
+					db.clubGroups.where('syncStatus').equals('failed').toArray(),
+					db.beltRanks.where('syncStatus').equals('failed').toArray(),
+					db.students.where('syncStatus').equals('failed').toArray(),
+					db.attendanceSessions.where('syncStatus').equals('failed').toArray(),
+					db.attendanceRecords.where('syncStatus').equals('failed').toArray()
+				]);
 
 			syncIssues = [
 				...clubs.map((club: Club) => ({
@@ -134,7 +148,7 @@
 					title: club.name,
 					detail: club.code ?? club.id,
 					syncError: club.syncError,
-					href: '/clubs'
+					href: '/clubs' as const
 				})),
 				...clubGroups.map((group: ClubGroup) => ({
 					entityName: 'club_groups' as const,
@@ -142,7 +156,7 @@
 					title: group.name,
 					detail: group.clubId,
 					syncError: group.syncError,
-					href: '/clubs'
+					href: '/clubs' as const
 				})),
 				...beltRanks.map((beltRank: BeltRank) => ({
 					entityName: 'belt_ranks' as const,
@@ -150,7 +164,7 @@
 					title: beltRank.name,
 					detail: `Order ${beltRank.order}`,
 					syncError: beltRank.syncError,
-					href: '/belt-ranks'
+					href: '/belt-ranks' as const
 				})),
 				...students.map((student: Student) => ({
 					entityName: 'students' as const,
@@ -158,7 +172,7 @@
 					title: student.fullName,
 					detail: student.studentCode ?? student.id,
 					syncError: student.syncError,
-					href: '/students'
+					href: '/students' as const
 				})),
 				...attendanceSessions.map((attendanceSession: AttendanceSession) => ({
 					entityName: 'attendance_sessions' as const,
@@ -166,7 +180,7 @@
 					title: attendanceSession.sessionDate,
 					detail: attendanceSession.clubId,
 					syncError: attendanceSession.syncError,
-					href: '/attendance'
+					href: '/attendance' as const
 				})),
 				...attendanceRecords.map((attendanceRecord: AttendanceRecord) => ({
 					entityName: 'attendance_records' as const,
@@ -174,7 +188,7 @@
 					title: attendanceRecord.studentId,
 					detail: attendanceRecord.sessionId,
 					syncError: attendanceRecord.syncError,
-					href: '/attendance'
+					href: '/attendance' as const
 				}))
 			];
 		} finally {
@@ -243,8 +257,8 @@
 	<meta name="theme-color" content="#0f172a" />
 </svelte:head>
 
-<div class="h-[100dvh] overflow-hidden">
-	<div class="relative flex h-[100dvh]">
+<div class="h-dvh overflow-hidden">
+	<div class="relative flex h-dvh">
 		{#if sidebarOpen}
 			<button
 				type="button"
@@ -255,30 +269,27 @@
 		{/if}
 
 		<aside
-			class={`fixed top-0 left-0 z-40 h-[100dvh] w-72 transform border-r border-white/6 bg-[linear-gradient(180deg,var(--app-sidebar-top),var(--app-sidebar-bottom))] text-white shadow-[0_24px_60px_rgba(0,0,0,0.42)] transition-transform duration-300 lg:static lg:h-[100dvh] lg:translate-x-0 ${
+			class={`fixed top-0 left-0 z-40 h-dvh w-72 transform border-r border-white/6 bg-[linear-gradient(180deg,var(--app-sidebar-top),var(--app-sidebar-bottom))] text-white shadow-[0_24px_60px_rgba(0,0,0,0.42)] transition-transform duration-300 lg:static lg:h-dvh lg:translate-x-0 ${
 				sidebarOpen ? 'translate-x-0' : '-translate-x-full'
 			}`}
 		>
 			<div class="flex h-full flex-col overflow-hidden">
 				<div class="relative border-b border-white/10 px-5 py-5">
-					<p class="relative text-[11px] font-semibold tracking-[0.22em] text-white/50 uppercase">
-						Offline First
-					</p>
 					<h1 class="relative mt-2 text-xl font-bold tracking-tight text-white">
-						Martial Arts Manager
+						Phật Quang Quyền
 					</h1>
 				</div>
 
 				<nav class="flex-1 space-y-2 p-3">
 					<p class="px-3 pt-2 text-[11px] font-semibold tracking-[0.18em] text-white/38 uppercase">
-						Workspace
+						Khu Vực Làm Việc
 					</p>
 					{#each navItems as item (item.href)}
 						{@const isActive =
 							page.url.pathname === item.href ||
 							(item.href !== '/' && page.url.pathname.startsWith(item.href))}
 						<a
-							href={item.href}
+							href={resolve(item.href)}
 							class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
 								isActive
 									? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
@@ -287,7 +298,7 @@
 							onclick={closeSidebar}
 						>
 							<span
-								class={`absolute inset-y-2 left-1 w-1 rounded-full bg-gradient-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
+								class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
 							></span>
 							<span
 								class={`inline-flex size-10 items-center justify-center rounded-xl border transition ${
@@ -301,7 +312,7 @@
 							<span class="flex-1">{item.label}</span>
 							{#if isActive}
 								<span
-									class="size-2 rounded-full bg-[var(--app-accent-cyan)] shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
+									class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
 								></span>
 							{/if}
 						</a>
@@ -309,9 +320,9 @@
 				</nav>
 
 				<div class="border-t border-white/10 p-4">
-					<div class="rounded-2xl bg-white/6 p-4 space-y-4">
+					<div class="space-y-4 rounded-2xl bg-white/6 p-4">
 						<div class="flex items-center justify-between gap-3">
-							<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Sync</p>
+							<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Đồng Bộ</p>
 							<span
 								class={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getSyncBadgeClass()}`}
 							>
@@ -321,11 +332,11 @@
 
 						<div class="grid grid-cols-2 gap-2 text-sm">
 							<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Pending</p>
+								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Đang Chờ</p>
 								<p class="mt-1 font-semibold text-white">{syncSnapshot.pendingCount}</p>
 							</div>
 							<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Failed</p>
+								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Lỗi</p>
 								<div class="mt-1 flex items-center justify-between gap-2">
 									<p class="font-semibold text-white">{syncSnapshot.failedCount}</p>
 									{#if syncSnapshot.failedCount > 0}
@@ -334,7 +345,7 @@
 											class="text-[11px] font-medium text-red-200 transition hover:text-white"
 											onclick={openSyncIssues}
 										>
-											View
+											Xem
 										</button>
 									{/if}
 								</div>
@@ -343,14 +354,16 @@
 
 						<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
 							<div class="flex items-center justify-between gap-3">
-								<span class="text-white/48">Last sync</span>
+								<span class="text-white/48">Lần đồng bộ gần nhất</span>
 								<span class="text-right text-white/80"
 									>{formatLastSync(syncSnapshot.lastSyncAt)}</span
 								>
 							</div>
 							{#if syncSnapshot.lastError}
 								<div class="mt-3 border-t border-white/8 pt-3">
-									<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">Last error</p>
+									<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">
+										Lỗi gần nhất
+									</p>
 									<p class="mt-1 line-clamp-2 text-sm text-red-100/90">{syncSnapshot.lastError}</p>
 								</div>
 							{/if}
@@ -363,7 +376,7 @@
 								onclick={() => void syncManager.rebaseFromServer()}
 							>
 								<span class="icon-[mdi--database-sync-outline] size-4"></span>
-								<span>Rebase</span>
+								<span>Tải lại</span>
 							</button>
 							<button
 								type="button"
@@ -371,7 +384,7 @@
 								onclick={() => void syncManager.syncNow()}
 							>
 								<span class="icon-[mdi--sync] size-4"></span>
-								<span>Sync now</span>
+								<span>Đồng bộ ngay</span>
 							</button>
 						</div>
 					</div>
@@ -379,27 +392,22 @@
 			</div>
 		</aside>
 
-		<div class="flex h-[100dvh] min-w-0 flex-1 flex-col overflow-hidden bg-[var(--app-bg)]">
+		<div class="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-(--app-bg)">
 			<header class="sticky top-0 z-20 px-4 pt-4">
 				<div
-					class="flex min-h-16 items-center gap-3 rounded-[1.35rem] border border-[var(--app-line)] bg-[var(--app-surface)] px-4 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl"
+					class="flex min-h-16 items-center gap-3 rounded-[1.35rem] border border-(--app-line) bg-(--app-surface) px-4 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl"
 				>
 					<button
 						type="button"
-						class="inline-flex items-center justify-center rounded-xl border border-[var(--app-line)] bg-white p-2 text-[var(--app-ink)] hover:bg-slate-50 lg:hidden"
+						class="inline-flex items-center justify-center rounded-xl border border-(--app-line) bg-white p-2 text-(--app-ink) hover:bg-slate-50 lg:hidden"
 						onclick={toggleSidebar}
 						aria-label="Toggle sidebar"
 					>
 						<span class="icon-[mdi--menu] size-5"></span>
 					</button>
 					<div class="min-w-0 flex-1">
-						<p
-							class="text-[11px] font-semibold tracking-[0.18em] text-[var(--app-muted)] uppercase"
-						>
-							Management Workspace
-						</p>
-						<p class="truncate text-sm font-semibold text-[var(--app-ink)]">
-							Offline-ready operations for clubs, belts, and students
+						<p class="text-[11px] font-semibold tracking-[0.18em] text-(--app-muted) uppercase">
+							Không gian quản lý
 						</p>
 					</div>
 				</div>
@@ -414,7 +422,13 @@
 
 <ToastViewport />
 
-<AppModal open={syncIssuesOpen} title="Sync issues" description="Failed local records that need your attention." size="lg" onClose={closeSyncIssues}>
+<AppModal
+	open={syncIssuesOpen}
+	title="Lỗi đồng bộ"
+	description="Các bản ghi lỗi cần bạn xử lý."
+	size="lg"
+	onClose={closeSyncIssues}
+>
 	<div class="space-y-3">
 		<div class="flex items-center justify-end">
 			<button
@@ -426,32 +440,36 @@
 				}}
 			>
 				<span class="icon-[mdi--sync] size-4"></span>
-				<span>Retry failed</span>
+				<span>Thử lại bản ghi lỗi</span>
 			</button>
 		</div>
 		{#if isLoadingSyncIssues}
-			<p class="text-sm text-slate-500">Loading sync issues...</p>
+			<p class="text-sm text-slate-500">Đang tải danh sách lỗi đồng bộ...</p>
 		{:else if syncIssues.length === 0}
-			<p class="text-sm text-slate-500">No failed records found.</p>
+			<p class="text-sm text-slate-500">Không có bản ghi lỗi.</p>
 		{:else}
 			{#each syncIssues as issue (`${issue.entityName}:${issue.recordId}`)}
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
 					<div class="flex items-start justify-between gap-3">
 						<div class="min-w-0">
-							<p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{getEntityLabel(issue.entityName)}</p>
+							<p class="text-xs font-semibold tracking-[0.16em] text-slate-500 uppercase">
+								{getEntityLabel(issue.entityName)}
+							</p>
 							<p class="mt-1 truncate font-semibold text-slate-900">{issue.title}</p>
 							{#if issue.detail}
 								<p class="mt-1 text-sm text-slate-500">{issue.detail}</p>
 							{/if}
-							<p class="mt-2 text-sm text-red-700">{issue.syncError ?? 'Sync failed without a detailed error message.'}</p>
+							<p class="mt-2 text-sm text-red-700">
+								{issue.syncError ?? 'Đồng bộ thất bại nhưng chưa có thông tin lỗi chi tiết.'}
+							</p>
 						</div>
 						<a
-							href={issue.href}
+							href={resolve(issue.href)}
 							class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
 							onclick={closeSyncIssues}
 						>
 							<span class="icon-[mdi--open-in-new] size-4"></span>
-							<span>Open</span>
+							<span>Mở</span>
 						</a>
 					</div>
 				</div>

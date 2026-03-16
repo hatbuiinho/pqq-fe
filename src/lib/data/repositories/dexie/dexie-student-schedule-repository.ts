@@ -58,14 +58,14 @@ export class DexieStudentScheduleRepository implements StudentScheduleRepository
 			for (const weekday of normalizedWeekdays) {
 				const existingRow = existing.find((row) => row.weekday === weekday);
 				if (existingRow) {
-				await db.studentSchedules.update(existingRow.id, {
-					isActive: true,
-					deletedAt: undefined,
-					updatedAt: now,
-					lastModifiedAt: now,
-					syncStatus: 'pending',
-					syncError: undefined
-				});
+					await db.studentSchedules.update(existingRow.id, {
+						isActive: true,
+						deletedAt: undefined,
+						updatedAt: now,
+						lastModifiedAt: now,
+						syncStatus: 'pending',
+						syncError: undefined
+					});
 					continue;
 				}
 

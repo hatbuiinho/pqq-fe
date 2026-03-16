@@ -1,8 +1,6 @@
 export const unaccent = (value: string) => {
-	const from =
-		'àáãảạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđùúủũụưừứửữựòóỏõọôồốổỗộơờớởỡợìíỉĩịäëïîöüûñçýỳỹỵỷ';
-	const to =
-		'aaaaaaaaaaaaaaaaaeeeeeeeeeeeduuuuuuuuuuuoooooooooooooooooiiiiiaeiiouuncyyyyy';
+	const from = 'àáãảạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđùúủũụưừứửữựòóỏõọôồốổỗộơờớởỡợìíỉĩịäëïîöüûñçýỳỹỵỷ';
+	const to = 'aaaaaaaaaaaaaaaaaeeeeeeeeeeeduuuuuuuuuuuoooooooooooooooooiiiiiaeiiouuncyyyyy';
 	let result = value;
 	for (let i = 0; i < from.length; i += 1) {
 		result = result.replace(new RegExp(from[i], 'gi'), to[i]);
@@ -45,7 +43,9 @@ export const generateClubCode = (name: string) => {
 
 export const generateUniqueClubCode = (name: string, existingCodes: string[]) => {
 	const baseCode = generateClubCode(name);
-	const normalizedCodes = new Set(existingCodes.map((code) => code.trim().toUpperCase()).filter(Boolean));
+	const normalizedCodes = new Set(
+		existingCodes.map((code) => code.trim().toUpperCase()).filter(Boolean)
+	);
 	if (!normalizedCodes.has(baseCode)) return baseCode;
 
 	let suffix = 2;
@@ -59,7 +59,4 @@ export const generateUniqueClubCode = (name: string, existingCodes: string[]) =>
 export const generateBeltRankId = (name: string) => slugify(name) || 'belt-rank';
 
 export const normalizeSearchText = (value: string) =>
-	unaccent(value)
-		.toLowerCase()
-		.trim()
-		.replace(/\s+/g, ' ');
+	unaccent(value).toLowerCase().trim().replace(/\s+/g, ' ');

@@ -19,7 +19,15 @@ export type StudentFormValue = {
 
 export type StudentFormErrors = Partial<
 	Record<
-		'fullName' | 'clubId' | 'groupId' | 'beltRankId' | 'dateOfBirth' | 'joinedAt' | 'phone' | 'email' | 'scheduleDays',
+		| 'fullName'
+		| 'clubId'
+		| 'groupId'
+		| 'beltRankId'
+		| 'dateOfBirth'
+		| 'joinedAt'
+		| 'phone'
+		| 'email'
+		| 'scheduleDays',
 		string
 	>
 >;

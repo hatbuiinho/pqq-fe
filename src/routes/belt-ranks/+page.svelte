@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { DataTableToolbar, EmptyState, IconActionButton, PageHeader, SectionCard, subscribeDataChanged } from '$lib';
+	import {
+		DataTableToolbar,
+		EmptyState,
+		IconActionButton,
+		PageHeader,
+		SectionCard,
+		subscribeDataChanged
+	} from '$lib';
 	import type { BeltRank } from '$lib/domain/models';
 	import { beltRankUseCases } from '$lib/app/services';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
@@ -67,10 +74,14 @@
 
 	function getBeltRankStatusLabel(beltRank: BeltRank): string {
 		if (beltRank.deletedAt) {
-			return beltRank.syncStatus === 'failed' ? beltRank.syncError ?? 'Delete failed' : 'Pending delete';
+			return beltRank.syncStatus === 'failed'
+				? (beltRank.syncError ?? 'Delete failed')
+				: 'Pending delete';
 		}
 		if (beltRank.syncStatus !== 'synced') {
-			return beltRank.syncStatus === 'failed' ? beltRank.syncError ?? 'Sync failed' : 'Waiting for sync';
+			return beltRank.syncStatus === 'failed'
+				? (beltRank.syncError ?? 'Sync failed')
+				: 'Waiting for sync';
 		}
 		return beltRank.isActive ? 'Active' : 'Inactive';
 	}
@@ -173,7 +184,9 @@
 			nextErrors.name = 'Belt rank name is required.';
 		} else {
 			const generatedID = generateBeltRankId(normalizedName);
-			const duplicatedName = beltRanks.find((beltRank) => beltRank.id === generatedID && beltRank.id !== editingId);
+			const duplicatedName = beltRanks.find(
+				(beltRank) => beltRank.id === generatedID && beltRank.id !== editingId
+			);
 			if (duplicatedName) {
 				nextErrors.name = 'Belt rank name already exists.';
 			}
@@ -183,7 +196,8 @@
 			nextErrors.order = 'Order must be an integer greater than or equal to 1.';
 		} else {
 			const duplicatedOrder = beltRanks.find(
-				(beltRank) => !beltRank.deletedAt && beltRank.order === nextOrder && beltRank.id !== editingId
+				(beltRank) =>
+					!beltRank.deletedAt && beltRank.order === nextOrder && beltRank.id !== editingId
 			);
 			if (duplicatedOrder) {
 				nextErrors.order = 'Belt rank order already exists.';
@@ -356,7 +370,10 @@
 								<h3 class="font-semibold text-slate-900">{beltRank.name}</h3>
 								<p class="text-sm text-slate-500">Order {beltRank.order}</p>
 								<p class="text-sm text-slate-600">{beltRank.description ?? 'No description'}</p>
-								<p class:text-red-700={beltRank.syncStatus === 'failed'} class="text-sm text-slate-600">
+								<p
+									class:text-red-700={beltRank.syncStatus === 'failed'}
+									class="text-sm text-slate-600"
+								>
 									{getBeltRankStatusLabel(beltRank)}
 								</p>
 							</div>
@@ -402,11 +419,14 @@
 							<tr class="border-b border-slate-100">
 								<td class="py-3 pr-3 text-slate-900">{beltRank.order}</td>
 								<td class="py-3 pr-3 font-medium text-slate-900">{beltRank.name}</td>
-								<td class:text-red-700={beltRank.syncStatus === 'failed'} class="py-3 pr-3 text-slate-700">
+								<td
+									class:text-red-700={beltRank.syncStatus === 'failed'}
+									class="py-3 pr-3 text-slate-700"
+								>
 									{getBeltRankStatusLabel(beltRank)}
 								</td>
 								<td class="py-3 pr-3 text-slate-700">{beltRank.description ?? '-'}</td>
-								<td class="py-3 pl-3 pr-0 text-right">
+								<td class="py-3 pr-0 pl-3 text-right">
 									<div class="inline-flex gap-2">
 										{#if beltRank.deletedAt}
 											<IconActionButton
@@ -435,12 +455,16 @@
 				</table>
 			</div>
 
-			<DataPagination bind:currentPage totalItems={filteredBeltRanks.length} pageSize={pageSize} />
+			<DataPagination bind:currentPage totalItems={filteredBeltRanks.length} {pageSize} />
 		{/if}
 	</SectionCard>
 </main>
 
-<AppModal open={isModalOpen} title={editingId ? 'Edit belt rank' : 'Create belt rank'} onClose={closeModal}>
+<AppModal
+	open={isModalOpen}
+	title={editingId ? 'Edit belt rank' : 'Create belt rank'}
+	onClose={closeModal}
+>
 	<form class="grid gap-4 md:grid-cols-2" onsubmit={handleSubmit}>
 		<label class="space-y-1">
 			<span class="text-sm font-medium text-slate-700">Name *</span>
@@ -470,7 +494,8 @@
 		</label>
 		<label class="space-y-1 md:col-span-2">
 			<span class="text-sm font-medium text-slate-700">Description</span>
-			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.description}></textarea>
+			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.description}
+			></textarea>
 		</label>
 		<label class="inline-flex items-center gap-2 md:col-span-2">
 			<input type="checkbox" bind:checked={form.isActive} />
@@ -484,7 +509,11 @@
 			>
 				{isSubmitting ? 'Saving...' : editingId ? 'Update belt rank' : 'Create belt rank'}
 			</button>
-			<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium" type="button" onclick={closeModal}>
+			<button
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				type="button"
+				onclick={closeModal}
+			>
 				Cancel
 			</button>
 		</div>
@@ -551,10 +580,14 @@
 		<div class="space-y-4">
 			<div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
 				<div class="flex flex-wrap items-center gap-3">
-					<span class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+					<span
+						class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+					>
 						Imported {importSummary.importedCount}
 					</span>
-					<span class="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+					<span
+						class="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700"
+					>
 						Errors {importSummary.errors.length}
 					</span>
 				</div>
@@ -562,7 +595,9 @@
 				{#if importErrors.length > 0}
 					<div class="mt-4 max-h-80 space-y-2 overflow-y-auto">
 						{#each importErrors as importError (`${importError.row}:${importError.message}`)}
-							<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+							<div
+								class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700"
+							>
 								<p class="font-semibold">Row {importError.row}</p>
 								<p class="mt-1">{importError.message}</p>
 							</div>

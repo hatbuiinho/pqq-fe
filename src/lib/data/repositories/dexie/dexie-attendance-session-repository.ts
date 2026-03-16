@@ -47,8 +47,14 @@ export class DexieAttendanceSessionRepository implements AttendanceSessionReposi
 		});
 	}
 
-	async getByClubAndDate(clubId: string, sessionDate: string): Promise<AttendanceSession | undefined> {
-		const row = await getDB().attendanceSessions.where('[clubId+sessionDate]').equals([clubId, sessionDate]).first();
+	async getByClubAndDate(
+		clubId: string,
+		sessionDate: string
+	): Promise<AttendanceSession | undefined> {
+		const row = await getDB()
+			.attendanceSessions.where('[clubId+sessionDate]')
+			.equals([clubId, sessionDate])
+			.first();
 		if (!row || row.deletedAt) return undefined;
 		return row;
 	}

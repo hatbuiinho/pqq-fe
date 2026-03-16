@@ -1,4 +1,10 @@
-import type { SyncPullRequest, SyncPullResponse, SyncPushRequest, SyncPushResponse, SyncRebaseResponse } from '$lib/domain/sync';
+import type {
+	SyncPullRequest,
+	SyncPullResponse,
+	SyncPushRequest,
+	SyncPushResponse,
+	SyncRebaseResponse
+} from '$lib/domain/sync';
 
 export interface SyncApiClient {
 	push(request: SyncPushRequest): Promise<SyncPushResponse>;
@@ -38,7 +44,9 @@ export class HttpSyncApiClient implements SyncApiClient {
 		});
 
 		if (!response.ok) {
-			throw new Error(await extractErrorMessage(response, `Sync push failed with status ${response.status}.`));
+			throw new Error(
+				await extractErrorMessage(response, `Sync push failed with status ${response.status}.`)
+			);
 		}
 
 		return response.json() as Promise<SyncPushResponse>;
@@ -50,15 +58,20 @@ export class HttpSyncApiClient implements SyncApiClient {
 		if (request.since) searchParams.set('since', request.since);
 		if (request.limit) searchParams.set('limit', String(request.limit));
 
-		const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/pull?${searchParams.toString()}`, {
-			method: 'GET',
-			headers: {
-				accept: 'application/json'
+		const response = await this.fetchImpl(
+			`${this.baseUrl}/api/v1/sync/pull?${searchParams.toString()}`,
+			{
+				method: 'GET',
+				headers: {
+					accept: 'application/json'
+				}
 			}
-		});
+		);
 
 		if (!response.ok) {
-			throw new Error(await extractErrorMessage(response, `Sync pull failed with status ${response.status}.`));
+			throw new Error(
+				await extractErrorMessage(response, `Sync pull failed with status ${response.status}.`)
+			);
 		}
 
 		return response.json() as Promise<SyncPullResponse>;
@@ -73,7 +86,9 @@ export class HttpSyncApiClient implements SyncApiClient {
 		});
 
 		if (!response.ok) {
-			throw new Error(await extractErrorMessage(response, `Sync rebase failed with status ${response.status}.`));
+			throw new Error(
+				await extractErrorMessage(response, `Sync rebase failed with status ${response.status}.`)
+			);
 		}
 
 		return response.json() as Promise<SyncRebaseResponse>;

@@ -38,7 +38,8 @@ export class StudentUseCases {
 		if (input.groupId) {
 			const group = await this.clubGroupRepo.getById(input.groupId);
 			if (!group || group.deletedAt) throw new Error('Group does not exist.');
-			if (group.clubId !== input.clubId) throw new Error('Group does not belong to the selected club.');
+			if (group.clubId !== input.clubId)
+				throw new Error('Group does not belong to the selected club.');
 			if (group.syncStatus !== 'synced') throw new Error('Group is not synced yet.');
 			if (!group.isActive) throw new Error('Group is inactive.');
 		}
@@ -82,7 +83,11 @@ export class StudentUseCases {
 		return id;
 	}
 
-	async update(id: string, patch: Partial<CreateStudentInput>, syncStatus: SyncStatus = 'pending'): Promise<number> {
+	async update(
+		id: string,
+		patch: Partial<CreateStudentInput>,
+		syncStatus: SyncStatus = 'pending'
+	): Promise<number> {
 		const existingStudent = await this.studentRepo.getById(id);
 		if (!existingStudent || existingStudent.deletedAt) throw new Error('Student does not exist.');
 		const normalizedPatch = await this.prepareUpdatePatch(existingStudent, patch, syncStatus);
@@ -181,7 +186,8 @@ export class StudentUseCases {
 		if (patch.groupId) {
 			const group = await this.clubGroupRepo.getById(patch.groupId);
 			if (!group || group.deletedAt) throw new Error('Group does not exist.');
-			if (group.clubId !== resolvedClubId) throw new Error('Group does not belong to the selected club.');
+			if (group.clubId !== resolvedClubId)
+				throw new Error('Group does not belong to the selected club.');
 			if (group.syncStatus !== 'synced') throw new Error('Group is not synced yet.');
 			if (!group.isActive) throw new Error('Group is inactive.');
 		}
@@ -195,7 +201,8 @@ export class StudentUseCases {
 			if (!beltRank.isActive) throw new Error('Belt rank is inactive.');
 		}
 
-		const studentCode = patch.studentCode === undefined ? undefined : patch.studentCode.trim() || undefined;
+		const studentCode =
+			patch.studentCode === undefined ? undefined : patch.studentCode.trim() || undefined;
 		const phone = patch.phone === undefined ? undefined : patch.phone.trim() || undefined;
 		const email = patch.email === undefined ? undefined : patch.email.trim() || undefined;
 		const address = patch.address === undefined ? undefined : patch.address.trim() || undefined;

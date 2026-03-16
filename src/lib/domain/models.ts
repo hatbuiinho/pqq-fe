@@ -127,7 +127,13 @@ export interface StudentAvatarCache {
 }
 
 export type AttendanceSessionStatus = 'draft' | 'completed';
-export type AttendanceStatus = 'unmarked' | 'present' | 'late' | 'excused' | 'absent';
+export type AttendanceStatus =
+	| 'unmarked'
+	| 'present'
+	| 'late'
+	| 'excused'
+	| 'left_early'
+	| 'absent';
 
 export interface AttendanceSession extends BaseEntity<string> {
 	clubId: string;

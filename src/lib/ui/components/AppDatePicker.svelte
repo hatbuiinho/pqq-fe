@@ -119,7 +119,7 @@
 					: 'flex w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900'
 			}`}
 			onclick={handleInputClick}
-			disabled={disabled}
+			{disabled}
 			aria-label={placeholder}
 			title={placeholder}
 		>
@@ -135,20 +135,20 @@
 	{#if showAgePresets}
 		<div class="-mx-1 overflow-x-auto px-1 pb-1">
 			<div class="flex min-w-max gap-2">
-			{#each agePresetOptions as option (option.age)}
-				<button
-					type="button"
-					class={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
-						value === option.value
-							? 'border-slate-900 bg-slate-900 text-white'
-							: 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'
-					}`}
-					onclick={() => applyAgePreset(option.age)}
-					disabled={disabled}
-				>
-					{option.age} yrs
-				</button>
-			{/each}
+				{#each agePresetOptions as option (option.age)}
+					<button
+						type="button"
+						class={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+							value === option.value
+								? 'border-slate-900 bg-slate-900 text-white'
+								: 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'
+						}`}
+						onclick={() => applyAgePreset(option.age)}
+						{disabled}
+					>
+						{option.age} yrs
+					</button>
+				{/each}
 			</div>
 		</div>
 	{/if}

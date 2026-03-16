@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { DataTableToolbar, EmptyState, IconActionButton, PageHeader, SectionCard, subscribeDataChanged } from '$lib';
+	import {
+		DataTableToolbar,
+		EmptyState,
+		IconActionButton,
+		PageHeader,
+		SectionCard,
+		subscribeDataChanged
+	} from '$lib';
 	import type { Club, ClubGroup, ClubSchedule, Weekday } from '$lib/domain/models';
 	import { clubGroupUseCases, clubScheduleUseCases, clubUseCases } from '$lib/app/services';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
@@ -155,8 +162,13 @@
 	async function loadClubs() {
 		try {
 			isLoading = true;
-			const [clubRows, clubGroupRows] = await Promise.all([clubUseCases.list(), clubGroupUseCases.list()]);
-			const clubScheduleRows = (await Promise.all(clubRows.map((club) => clubScheduleUseCases.listByClub(club.id)))).flat();
+			const [clubRows, clubGroupRows] = await Promise.all([
+				clubUseCases.list(),
+				clubGroupUseCases.list()
+			]);
+			const clubScheduleRows = (
+				await Promise.all(clubRows.map((club) => clubScheduleUseCases.listByClub(club.id)))
+			).flat();
 			clubs = clubRows;
 			clubGroups = clubGroupRows;
 			clubSchedules = clubScheduleRows;
@@ -269,7 +281,9 @@
 			return group.syncStatus === 'failed' ? 'Delete failed' : 'Pending delete';
 		}
 		if (group.syncStatus !== 'synced') {
-			return group.syncStatus === 'failed' ? group.syncError ?? 'Sync failed' : 'Waiting for sync';
+			return group.syncStatus === 'failed'
+				? (group.syncError ?? 'Sync failed')
+				: 'Waiting for sync';
 		}
 		return group.isActive ? 'Active' : 'Inactive';
 	}
@@ -538,11 +552,15 @@
 						<div class="flex items-start justify-between gap-3">
 							<div class="space-y-1">
 								<h3 class="font-semibold text-slate-900">{club.name}</h3>
-								<p class="text-sm text-slate-500">{club.code ?? 'No code'} • {club.phone ?? 'No phone'}</p>
+								<p class="text-sm text-slate-500">
+									{club.code ?? 'No code'} • {club.phone ?? 'No phone'}
+								</p>
 								<p class="text-sm text-slate-500">
 									{formatWeekdayList(scheduleByClubId.get(club.id) ?? []) || 'No training days'}
 								</p>
-								<p class="text-sm text-slate-500">{groupCountByClubId.get(club.id) ?? 0} group(s)</p>
+								<p class="text-sm text-slate-500">
+									{groupCountByClubId.get(club.id) ?? 0} group(s)
+								</p>
 								<p class="text-sm text-slate-600">{getClubStatusLabel(club)}</p>
 							</div>
 							<div class="inline-flex gap-2">
@@ -595,10 +613,12 @@
 								<td class="py-3 pr-3 font-medium text-slate-900">{club.name}</td>
 								<td class="py-3 pr-3 text-slate-700">{club.code ?? '-'}</td>
 								<td class="py-3 pr-3 text-slate-700">{club.phone ?? '-'}</td>
-								<td class="py-3 pr-3 text-slate-700">{formatWeekdayList(scheduleByClubId.get(club.id) ?? []) || '-'}</td>
+								<td class="py-3 pr-3 text-slate-700"
+									>{formatWeekdayList(scheduleByClubId.get(club.id) ?? []) || '-'}</td
+								>
 								<td class="py-3 pr-3 text-slate-700">{groupCountByClubId.get(club.id) ?? 0}</td>
 								<td class="py-3 pr-3 text-slate-700">{getClubStatusLabel(club)}</td>
-								<td class="py-3 pl-3 pr-0 text-right">
+								<td class="py-3 pr-0 pl-3 text-right">
 									<div class="inline-flex gap-2">
 										{#if club.deletedAt}
 											<IconActionButton
@@ -632,7 +652,7 @@
 				</table>
 			</div>
 
-			<DataPagination bind:currentPage totalItems={filteredClubs.length} pageSize={pageSize} />
+			<DataPagination bind:currentPage totalItems={filteredClubs.length} {pageSize} />
 		{/if}
 	</SectionCard>
 </main>
@@ -660,12 +680,17 @@
 				disabled
 			/>
 			<span class="block text-xs text-slate-500">
-				Code is generated automatically from the initials of the club name and adds a numeric suffix when needed.
+				Code is generated automatically from the initials of the club name and adds a numeric suffix
+				when needed.
 			</span>
 		</label>
 		<label class="space-y-1">
 			<span class="text-sm font-medium text-slate-700">Phone</span>
-			<input class:border-red-300={!!errors.phone} class="w-full rounded-lg border-slate-300" bind:value={form.phone} />
+			<input
+				class:border-red-300={!!errors.phone}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={form.phone}
+			/>
 			{#if errors.phone}
 				<span class="block text-xs text-red-600">{errors.phone}</span>
 			{/if}
@@ -688,7 +713,8 @@
 		</label>
 		<label class="space-y-1 md:col-span-2">
 			<span class="text-sm font-medium text-slate-700">Notes</span>
-			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}></textarea>
+			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}
+			></textarea>
 		</label>
 		<div class="space-y-2 md:col-span-2">
 			<span class="text-sm font-medium text-slate-700">Training days *</span>
@@ -726,7 +752,11 @@
 			>
 				{isSubmitting ? 'Saving...' : editingId ? 'Update club' : 'Create club'}
 			</button>
-			<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium" type="button" onclick={closeModal}>
+			<button
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				type="button"
+				onclick={closeModal}
+			>
 				Cancel
 			</button>
 		</div>
@@ -760,7 +790,11 @@
 			</label>
 			<label class="space-y-1 md:col-span-2">
 				<span class="text-sm font-medium text-slate-700">Description</span>
-				<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={groupForm.description}></textarea>
+				<textarea
+					class="w-full rounded-lg border-slate-300"
+					rows="3"
+					bind:value={groupForm.description}
+				></textarea>
 			</label>
 			<div class="flex gap-3 md:col-span-2">
 				<button
@@ -783,11 +817,16 @@
 		<div class="space-y-3">
 			<div class="flex items-center justify-between">
 				<h3 class="text-sm font-semibold text-slate-900">Groups in this club</h3>
-				<p class="text-xs text-slate-500">{groupsForSelectedClub.filter((group) => !group.deletedAt).length} active group(s)</p>
+				<p class="text-xs text-slate-500">
+					{groupsForSelectedClub.filter((group) => !group.deletedAt).length} active group(s)
+				</p>
 			</div>
 
 			{#if groupsForSelectedClub.length === 0}
-				<EmptyState title="No groups yet" description="Create the first group for this club right here." />
+				<EmptyState
+					title="No groups yet"
+					description="Create the first group for this club right here."
+				/>
 			{:else}
 				<div class="space-y-3">
 					{#each groupsForSelectedClub as group (group.id)}
@@ -866,7 +905,11 @@
 			>
 				{isImporting ? 'Importing...' : 'Import'}
 			</button>
-			<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium" type="button" onclick={closeImportModal}>
+			<button
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				type="button"
+				onclick={closeImportModal}
+			>
 				Cancel
 			</button>
 		</div>
@@ -884,10 +927,14 @@
 		<div class="space-y-4">
 			<div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
 				<div class="flex flex-wrap items-center gap-3">
-					<span class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+					<span
+						class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+					>
 						Imported {importSummary.importedCount}
 					</span>
-					<span class="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+					<span
+						class="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700"
+					>
 						Errors {importSummary.errors.length}
 					</span>
 				</div>
@@ -895,7 +942,9 @@
 				{#if importErrors.length > 0}
 					<div class="mt-4 max-h-80 space-y-2 overflow-y-auto">
 						{#each importErrors as importError (`${importError.row}:${importError.message}`)}
-							<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+							<div
+								class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700"
+							>
 								<p class="font-semibold">Row {importError.row}</p>
 								<p class="mt-1">{importError.message}</p>
 							</div>

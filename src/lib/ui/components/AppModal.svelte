@@ -60,7 +60,6 @@
 			window.removeEventListener('keydown', handleKeydown);
 		};
 	});
-
 </script>
 
 {#if open}
@@ -77,7 +76,9 @@
 			aria-modal="true"
 			aria-label={title}
 		>
-			<header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+			<header
+				class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5"
+			>
 				<div class="min-w-0 space-y-1">
 					<h2 class="text-lg font-semibold text-slate-900">{title}</h2>
 					{#if description}
@@ -93,7 +94,9 @@
 					<span class="icon-[mdi--close] size-5"></span>
 				</button>
 			</header>
-			<div class={`min-w-0 flex-1 px-4 py-4 sm:px-5 ${allowOverflow ? 'overflow-visible' : 'overflow-y-auto'}`}>
+			<div
+				class={`min-w-0 flex-1 px-4 py-4 sm:px-5 ${allowOverflow ? 'overflow-visible' : 'overflow-y-auto'}`}
+			>
 				{@render children?.()}
 			</div>
 			{#if footer}

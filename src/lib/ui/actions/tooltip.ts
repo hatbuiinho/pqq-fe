@@ -5,12 +5,14 @@ export type TooltipOptions = {
 	align?: 'left' | 'center' | 'right';
 };
 
-const resolveText = (value: string | TooltipOptions) => (typeof value === 'string' ? value : value.text);
+const resolveText = (value: string | TooltipOptions) =>
+	typeof value === 'string' ? value : value.text;
 const resolvePlacement = (value: string | TooltipOptions) =>
-	typeof value === 'string' ? 'top' : value.placement ?? 'top';
-const resolveOffset = (value: string | TooltipOptions) => (typeof value === 'string' ? 8 : value.offset ?? 8);
+	typeof value === 'string' ? 'top' : (value.placement ?? 'top');
+const resolveOffset = (value: string | TooltipOptions) =>
+	typeof value === 'string' ? 8 : (value.offset ?? 8);
 const resolveAlign = (value: string | TooltipOptions) =>
-	typeof value === 'string' ? 'center' : value.align ?? 'center';
+	typeof value === 'string' ? 'center' : (value.align ?? 'center');
 
 export const tooltip = (node: HTMLElement, value: string | TooltipOptions) => {
 	let text = resolveText(value);
@@ -33,7 +35,11 @@ export const tooltip = (node: HTMLElement, value: string | TooltipOptions) => {
 		tooltipEl.textContent = text;
 		tooltipEl.style.opacity = '1';
 		tooltipEl.style.transform =
-			align === 'center' ? 'translateX(-50%)' : align === 'left' ? 'translateX(0)' : 'translateX(-100%)';
+			align === 'center'
+				? 'translateX(-50%)'
+				: align === 'left'
+					? 'translateX(0)'
+					: 'translateX(-100%)';
 
 		const rect = node.getBoundingClientRect();
 		const tooltipRect = tooltipEl.getBoundingClientRect();

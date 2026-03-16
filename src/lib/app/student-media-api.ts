@@ -58,18 +58,24 @@ export const studentMediaApi = {
 	},
 
 	async setPrimaryAvatar(studentId: string, mediaId: string): Promise<StudentAvatar> {
-		const response = await fetch(buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/primary`), {
-			method: 'POST'
-		});
+		const response = await fetch(
+			buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/primary`),
+			{
+				method: 'POST'
+			}
+		);
 
 		const payload = await parseJson<SetPrimaryStudentAvatarResponse>(response);
 		return payload.avatar;
 	},
 
 	async deleteAvatar(studentId: string, mediaId: string): Promise<void> {
-		const response = await fetch(buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/delete`), {
-			method: 'POST'
-		});
+		const response = await fetch(
+			buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/delete`),
+			{
+				method: 'POST'
+			}
+		);
 
 		await parseJson<{ success: boolean }>(response);
 	},

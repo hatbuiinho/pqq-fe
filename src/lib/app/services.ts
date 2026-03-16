@@ -36,7 +36,10 @@ export const attendanceUseCases = new AttendanceUseCases(
 );
 export const clubGroupUseCases = new ClubGroupUseCases(clubGroupRepository, clubRepository);
 export const clubUseCases = new ClubUseCases(clubRepository);
-export const clubScheduleUseCases = new ClubScheduleUseCases(clubScheduleRepository, clubRepository);
+export const clubScheduleUseCases = new ClubScheduleUseCases(
+	clubScheduleRepository,
+	clubRepository
+);
 export const beltRankUseCases = new BeltRankUseCases(beltRankRepository);
 export const studentUseCases = new StudentUseCases(
 	studentRepository,

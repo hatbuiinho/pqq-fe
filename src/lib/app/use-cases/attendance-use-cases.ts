@@ -17,6 +17,7 @@ import type {
 	StudentRepository
 } from '$lib/data/repositories/interfaces';
 import { getWeekdayFromIsoDate } from '$lib/domain/schedule-utils';
+import { getTodayIsoDate } from '$lib/domain/student-form-validation';
 
 type AttendanceViewItem = {
 	student: Student;
@@ -55,7 +56,10 @@ export class AttendanceUseCases {
 		return this.recordRepo.list();
 	}
 
-	async getSessionByClubAndDate(clubId: string, sessionDate: string): Promise<AttendanceSession | undefined> {
+	async getSessionByClubAndDate(
+		clubId: string,
+		sessionDate: string
+	): Promise<AttendanceSession | undefined> {
 		return this.sessionRepo.getByClubAndDate(clubId, sessionDate);
 	}
 
@@ -72,7 +76,9 @@ export class AttendanceUseCases {
 		);
 		const sessionWeekday = getWeekdayFromIsoDate(input.sessionDate);
 		const clubScheduleRows = await this.clubScheduleRepo.listByClub(input.clubId);
-		const clubScheduleSet = new Set(clubScheduleRows.filter((row) => row.isActive).map((row) => row.weekday));
+		const clubScheduleSet = new Set(
+			clubScheduleRows.filter((row) => row.isActive).map((row) => row.weekday)
+		);
 		const expectedStudents =
 			clubScheduleSet.size === 0 || !sessionWeekday
 				? activeStudents
@@ -80,7 +86,11 @@ export class AttendanceUseCases {
 						await Promise.all(
 							activeStudents.map(async (student) => ({
 								student,
-								expected: await this.isStudentExpectedOnWeekday(student.id, sessionWeekday, clubScheduleSet)
+								expected: await this.isStudentExpectedOnWeekday(
+									student.id,
+									sessionWeekday,
+									clubScheduleSet
+								)
 							}))
 						)
 					)
@@ -120,7 +130,9 @@ export class AttendanceUseCases {
 		return session;
 	}
 
-	async getSessionDetails(sessionId: string): Promise<{ session: AttendanceSession; club: Club; items: AttendanceViewItem[] }> {
+	async getSessionDetails(
+		sessionId: string
+	): Promise<{ session: AttendanceSession; club: Club; items: AttendanceViewItem[] }> {
 		const session = await this.sessionRepo.getById(sessionId);
 		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
 
@@ -132,7 +144,9 @@ export class AttendanceUseCases {
 			this.studentRepo.listByClub(session.clubId)
 		]);
 
-		const studentMap = new Map(students.filter((student) => !student.deletedAt).map((student) => [student.id, student]));
+		const studentMap = new Map(
+			students.filter((student) => !student.deletedAt).map((student) => [student.id, student])
+		);
 		const items = records
 			.map((record) => {
 				const student = studentMap.get(record.studentId);
@@ -153,7 +167,8 @@ export class AttendanceUseCases {
 		await this.recordRepo.update(record.id, {
 			attendanceStatus: input.attendanceStatus,
 			notes: input.notes?.trim() || undefined,
-			checkInAt: input.attendanceStatus === 'present' || input.attendanceStatus === 'late' ? now : undefined,
+			checkInAt:
+				input.attendanceStatus === 'present' || input.attendanceStatus === 'late' ? now : undefined,
 			updatedAt: now,
 			lastModifiedAt: now,
 			syncStatus: 'pending',
@@ -186,6 +201,11 @@ export class AttendanceUseCases {
 	}
 
 	async reopenSession(sessionId: string): Promise<void> {
+		const session = await this.sessionRepo.getById(sessionId);
+		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
+		if (session.sessionDate !== getTodayIsoDate()) {
+			throw new Error('Only sessions scheduled for today can be reopened.');
+		}
 		await this.setSessionStatus(sessionId, 'draft');
 	}
 
@@ -218,7 +238,10 @@ export class AttendanceUseCases {
 		emitDataChanged('attendance');
 	}
 
-	private async setSessionStatus(sessionId: string, status: AttendanceSessionStatus): Promise<void> {
+	private async setSessionStatus(
+		sessionId: string,
+		status: AttendanceSessionStatus
+	): Promise<void> {
 		const now = new Date().toISOString();
 		const updated = await this.sessionRepo.update(sessionId, {
 			status,

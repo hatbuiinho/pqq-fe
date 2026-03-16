@@ -46,11 +46,16 @@
 		}
 	}
 
-	const activeStudentsCount = $derived.by(() => students.filter((student) => student.status === 'active').length);
-	const pendingChangesCount = $derived.by(
-		() => [...clubs, ...beltRanks, ...students].filter((item) => item.syncStatus !== 'synced').length
+	const activeStudentsCount = $derived.by(
+		() => students.filter((student) => student.status === 'active').length
 	);
-	const studentsWithoutCodeCount = $derived.by(() => students.filter((student) => !student.studentCode).length);
+	const pendingChangesCount = $derived.by(
+		() =>
+			[...clubs, ...beltRanks, ...students].filter((item) => item.syncStatus !== 'synced').length
+	);
+	const studentsWithoutCodeCount = $derived.by(
+		() => students.filter((student) => !student.studentCode).length
+	);
 	const recentStudents = $derived.by(() =>
 		[...students]
 			.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -129,7 +134,9 @@
 	</PageHeader>
 
 	{#if errorMessage}
-		<p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>
+		<p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+			{errorMessage}
+		</p>
 	{/if}
 
 	<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -152,7 +159,9 @@
 	<section class="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
 		<SectionCard title="Recent Students" description="Latest students added on this device">
 			{#snippet actions()}
-				<a class="text-sm font-medium text-slate-700 hover:text-slate-900" href="/students">View all</a>
+				<a class="text-sm font-medium text-slate-700 hover:text-slate-900" href="/students"
+					>View all</a
+				>
 			{/snippet}
 
 			{#if recentStudents.length === 0}
@@ -163,7 +172,9 @@
 			{:else}
 				<div class="space-y-3">
 					{#each recentStudents as student (student.id)}
-						<div class="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+						<div
+							class="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+						>
 							<div>
 								<p class="font-medium text-slate-900">{student.fullName}</p>
 								<p class="text-sm text-slate-500">
@@ -181,7 +192,6 @@
 
 		<div class="space-y-6">
 			<SectionCard title="Students by Club" description="Distribution of students across clubs">
-
 				{#if studentsByClub.length === 0}
 					<EmptyState
 						title="No club data yet"
@@ -207,10 +217,14 @@
 				{/if}
 			</SectionCard>
 
-			<SectionCard title="Data Health" description="Local-only status before sync phase is connected">
-
+			<SectionCard
+				title="Data Health"
+				description="Local-only status before sync phase is connected"
+			>
 				<div class="space-y-3">
-					<div class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+					<div
+						class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
+					>
 						<div>
 							<p class="font-medium text-slate-900">Pending Local Changes</p>
 							<p class="text-sm text-slate-500">Records waiting for sync</p>
@@ -218,7 +232,9 @@
 						<p class="text-2xl font-bold text-slate-900">{pendingChangesCount}</p>
 					</div>
 
-					<div class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+					<div
+						class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
+					>
 						<div>
 							<p class="font-medium text-slate-900">Students Without Code</p>
 							<p class="text-sm text-slate-500">Student code will be generated on backend sync</p>
@@ -228,7 +244,9 @@
 				</div>
 
 				{#if clubs.length === 0 || beltRanks.length === 0}
-					<div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+					<div
+						class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+					>
 						{#if clubs.length === 0}
 							Create at least one club before adding students.
 						{:else}

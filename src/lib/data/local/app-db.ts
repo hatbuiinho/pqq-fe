@@ -33,14 +33,17 @@ export class AppDB extends Dexie {
 		this.version(9).stores({
 			clubs: 'id, code, name, isActive, updatedAt, syncStatus, deletedAt',
 			clubGroups: 'id, clubId, name, isActive, updatedAt, syncStatus, deletedAt, [clubId+name]',
-			clubSchedules: 'id, clubId, weekday, isActive, updatedAt, syncStatus, deletedAt, [clubId+weekday]',
+			clubSchedules:
+				'id, clubId, weekday, isActive, updatedAt, syncStatus, deletedAt, [clubId+weekday]',
 			beltRanks: 'id, name, order, isActive, updatedAt, syncStatus, deletedAt',
 			students:
 				'id, studentCode, fullName, clubId, groupId, beltRankId, status, updatedAt, syncStatus, deletedAt, [clubId+status], [clubId+beltRankId], [clubId+groupId]',
 			studentAvatarQueue: 'id, studentId, status, updatedAt, [studentId+status]',
 			studentAvatarCache: 'studentId, mediaId, updatedAt',
-			studentScheduleProfiles: 'id, studentId, mode, updatedAt, syncStatus, deletedAt, [studentId+mode]',
-			studentSchedules: 'id, studentId, weekday, isActive, updatedAt, syncStatus, deletedAt, [studentId+weekday]',
+			studentScheduleProfiles:
+				'id, studentId, mode, updatedAt, syncStatus, deletedAt, [studentId+mode]',
+			studentSchedules:
+				'id, studentId, weekday, isActive, updatedAt, syncStatus, deletedAt, [studentId+weekday]',
 			attendanceSessions:
 				'id, clubId, sessionDate, status, updatedAt, syncStatus, deletedAt, [clubId+sessionDate]',
 			attendanceRecords:

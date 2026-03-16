@@ -1,6 +1,9 @@
 import type { StudentScheduleMode, StudentScheduleProfile } from '$lib/domain/models';
 import { getDB } from '$lib/data/local/app-db';
-import type { CreateEntity, StudentScheduleProfileRepository } from '$lib/data/repositories/interfaces';
+import type {
+	CreateEntity,
+	StudentScheduleProfileRepository
+} from '$lib/data/repositories/interfaces';
 
 export class DexieStudentScheduleProfileRepository implements StudentScheduleProfileRepository {
 	async getById(id: string): Promise<StudentScheduleProfile | undefined> {

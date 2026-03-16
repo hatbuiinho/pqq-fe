@@ -1,6 +1,11 @@
 import type { Weekday } from '$lib/domain/models';
 
-export const WEEKDAY_OPTIONS: Array<{ value: Weekday; label: string; shortLabel: string; order: number }> = [
+export const WEEKDAY_OPTIONS: Array<{
+	value: Weekday;
+	label: string;
+	shortLabel: string;
+	order: number;
+}> = [
 	{ value: 'mon', label: 'Monday', shortLabel: 'Mon', order: 1 },
 	{ value: 'tue', label: 'Tuesday', shortLabel: 'Tue', order: 2 },
 	{ value: 'wed', label: 'Wednesday', shortLabel: 'Wed', order: 3 },
@@ -18,8 +23,9 @@ export function sortWeekdays(weekdays: Weekday[]): Weekday[] {
 }
 
 export function formatWeekdayList(weekdays: Weekday[]): string {
-	const labels = sortWeekdays(weekdays)
-		.map((weekday) => WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.shortLabel ?? weekday);
+	const labels = sortWeekdays(weekdays).map(
+		(weekday) => WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.shortLabel ?? weekday
+	);
 	return labels.join(', ');
 }
 

@@ -14,7 +14,7 @@
 <header class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 	<div class="space-y-2">
 		{#if eyebrow}
-			<p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{eyebrow}</p>
+			<p class="text-xs font-semibold tracking-[0.14em] text-slate-500 uppercase">{eyebrow}</p>
 		{/if}
 		<h1 class="text-3xl font-bold text-slate-900">{title}</h1>
 		{#if description}

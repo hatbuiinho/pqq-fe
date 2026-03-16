@@ -256,7 +256,7 @@
 	});
 </script>
 
-<AppModal open={open} title={title} description={description} onClose={onClose}>
+<AppModal {open} {title} {description} {onClose}>
 	<form class="grid w-full min-w-0 gap-4 md:grid-cols-2" onsubmit={handleSubmit}>
 		{#if studentId}
 			<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
@@ -295,7 +295,7 @@
 						{#if avatarDrafts.length > 0}
 							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-3">
-									<h4 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+									<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
 										Local queue
 									</h4>
 									<span class="text-xs text-slate-500">
@@ -311,12 +311,18 @@
 													class="h-full w-full cursor-zoom-in"
 													onclick={() => openAvatarPreview(draft.previewUrl, draft.fileName)}
 												>
-													<img class="h-full w-full object-cover" src={draft.previewUrl} alt={draft.fileName} />
+													<img
+														class="h-full w-full object-cover"
+														src={draft.previewUrl}
+														alt={draft.fileName}
+													/>
 												</button>
 											</div>
 											<div class="space-y-1">
 												<div class="flex items-center justify-between gap-2">
-													<span class="truncate text-sm font-medium text-slate-800">{draft.fileName}</span>
+													<span class="truncate text-sm font-medium text-slate-800"
+														>{draft.fileName}</span
+													>
 													<span
 														class={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
 															draft.status === 'failed'
@@ -360,59 +366,64 @@
 
 						{#if avatars.length > 0}
 							<div class="space-y-2">
-								<h4 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+								<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
 									Uploaded avatars
 								</h4>
 								<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-						{#each avatars as avatar (avatar.id)}
-							<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-								<div class="aspect-square overflow-hidden rounded-xl bg-slate-100">
-									{#if avatar.thumbnailUrl ?? avatar.downloadUrl}
-										<button
-											type="button"
-											class="h-full w-full cursor-zoom-in"
-											onclick={() =>
-												openAvatarPreview(
-													avatar.downloadUrl ?? avatar.thumbnailUrl ?? '',
-													avatar.originalFilename
-												)}
-										>
-											<img
-												class="h-full w-full object-cover"
-												src={avatar.thumbnailUrl ?? avatar.downloadUrl}
-												alt={avatar.originalFilename}
-											/>
-										</button>
-									{/if}
-								</div>
-								<div class="space-y-1">
-									<div class="flex items-center justify-between gap-2">
-										<span class="truncate text-sm font-medium text-slate-800">{avatar.originalFilename}</span>
-										{#if avatar.isPrimary}
-											<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">Primary</span>
-										{/if}
-									</div>
-									<p class="text-xs text-slate-500">{formatFileSize(avatar.fileSize)}</p>
-								</div>
-								<div class="flex gap-2">
-									<button
-										class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
-										type="button"
-										onclick={() => handleSetPrimaryAvatar(avatar.id)}
-										disabled={avatar.isPrimary}
-									>
-										Make primary
-									</button>
-									<button
-										class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600"
-										type="button"
-										onclick={() => handleDeleteAvatar(avatar.id)}
-									>
-										Delete
-									</button>
-								</div>
-							</div>
-						{/each}
+									{#each avatars as avatar (avatar.id)}
+										<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+											<div class="aspect-square overflow-hidden rounded-xl bg-slate-100">
+												{#if avatar.thumbnailUrl ?? avatar.downloadUrl}
+													<button
+														type="button"
+														class="h-full w-full cursor-zoom-in"
+														onclick={() =>
+															openAvatarPreview(
+																avatar.downloadUrl ?? avatar.thumbnailUrl ?? '',
+																avatar.originalFilename
+															)}
+													>
+														<img
+															class="h-full w-full object-cover"
+															src={avatar.thumbnailUrl ?? avatar.downloadUrl}
+															alt={avatar.originalFilename}
+														/>
+													</button>
+												{/if}
+											</div>
+											<div class="space-y-1">
+												<div class="flex items-center justify-between gap-2">
+													<span class="truncate text-sm font-medium text-slate-800"
+														>{avatar.originalFilename}</span
+													>
+													{#if avatar.isPrimary}
+														<span
+															class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+															>Primary</span
+														>
+													{/if}
+												</div>
+												<p class="text-xs text-slate-500">{formatFileSize(avatar.fileSize)}</p>
+											</div>
+											<div class="flex gap-2">
+												<button
+													class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
+													type="button"
+													onclick={() => handleSetPrimaryAvatar(avatar.id)}
+													disabled={avatar.isPrimary}
+												>
+													Make primary
+												</button>
+												<button
+													class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600"
+													type="button"
+													onclick={() => handleDeleteAvatar(avatar.id)}
+												>
+													Delete
+												</button>
+											</div>
+										</div>
+									{/each}
 								</div>
 							</div>
 						{/if}
@@ -443,14 +454,21 @@
 					readonly
 					disabled
 				/>
-				<span class="block text-xs text-slate-500">Backend sync will generate code in the format `PQQ-000001`.</span>
+				<span class="block text-xs text-slate-500"
+					>Backend sync will generate code in the format `PQQ-000001`.</span
+				>
 			</label>
 		{/if}
 
 		{#if showClubSelector}
 			<label class="min-w-0 space-y-1">
 				<span class="text-sm font-medium text-slate-700">Club *</span>
-				<select class:border-red-300={!!errors.clubId} class="w-full rounded-lg border-slate-300" bind:value={form.clubId} required>
+				<select
+					class:border-red-300={!!errors.clubId}
+					class="w-full rounded-lg border-slate-300"
+					bind:value={form.clubId}
+					required
+				>
 					<option value="">Select a club</option>
 					{#each availableClubs as club (club.id)}
 						<option value={club.id}>{club.name}</option>
@@ -463,13 +481,22 @@
 		{:else if clubReadonlyName}
 			<label class="min-w-0 space-y-1">
 				<span class="text-sm font-medium text-slate-700">Club</span>
-				<input class="w-full rounded-lg border-slate-300 bg-slate-100 text-slate-500" value={clubReadonlyName} readonly disabled />
+				<input
+					class="w-full rounded-lg border-slate-300 bg-slate-100 text-slate-500"
+					value={clubReadonlyName}
+					readonly
+					disabled
+				/>
 			</label>
 		{/if}
 
 		<label class="min-w-0 space-y-1">
 			<span class="text-sm font-medium text-slate-700">Group</span>
-			<select class:border-red-300={!!errors.groupId} class="w-full rounded-lg border-slate-300" bind:value={form.groupId}>
+			<select
+				class:border-red-300={!!errors.groupId}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={form.groupId}
+			>
 				<option value="">No group</option>
 				{#each availableGroups as group (group.id)}
 					<option value={group.id}>{group.name}</option>
@@ -482,7 +509,12 @@
 
 		<label class="min-w-0 space-y-1">
 			<span class="text-sm font-medium text-slate-700">Belt rank *</span>
-			<select class:border-red-300={!!errors.beltRankId} class="w-full rounded-lg border-slate-300" bind:value={form.beltRankId} required>
+			<select
+				class:border-red-300={!!errors.beltRankId}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={form.beltRankId}
+				required
+			>
 				<option value="">Select a belt rank</option>
 				{#each availableBeltRanks as beltRank (beltRank.id)}
 					<option value={beltRank.id}>{beltRank.name}</option>
@@ -508,17 +540,27 @@
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2">
-					<label class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
-						<input type="radio" name="scheduleMode" bind:group={form.scheduleMode} value="inherit" />
+					<label
+						class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+					>
+						<input
+							type="radio"
+							name="scheduleMode"
+							bind:group={form.scheduleMode}
+							value="inherit"
+						/>
 						<span>Use club schedule</span>
 					</label>
-					<label class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
+					<label
+						class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+					>
 						<input type="radio" name="scheduleMode" bind:group={form.scheduleMode} value="custom" />
 						<span>Custom schedule</span>
 					</label>
 				</div>
 				<p class="text-xs text-slate-500">
-					Club training days: {formatWeekdayList(availableClubTrainingDays) || 'No training days configured for this club yet.'}
+					Club training days: {formatWeekdayList(availableClubTrainingDays) ||
+						'No training days configured for this club yet.'}
 				</p>
 				{#if form.scheduleMode === 'custom'}
 					<div class="space-y-2">
@@ -550,7 +592,11 @@
 
 		<label class="min-w-0 space-y-1">
 			<span class="text-sm font-medium text-slate-700">Date of birth</span>
-			<AppDatePicker bind:value={form.dateOfBirth} placeholder="Select date of birth" showAgePresets={true} />
+			<AppDatePicker
+				bind:value={form.dateOfBirth}
+				placeholder="Select date of birth"
+				showAgePresets={true}
+			/>
 			{#if errors.dateOfBirth}
 				<span class="block text-xs text-red-600">{errors.dateOfBirth}</span>
 			{/if}
@@ -568,7 +614,9 @@
 			<span class="text-sm font-medium text-slate-700">Gender</span>
 			<div class="flex flex-wrap gap-2 rounded-lg border border-slate-300 bg-white p-2">
 				{#each genderOptions as option (option.value)}
-					<label class="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700">
+					<label
+						class="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+					>
 						<input type="radio" name="gender" bind:group={form.gender} value={option.value} />
 						<span>{option.label}</span>
 					</label>
@@ -589,7 +637,11 @@
 
 		<label class="min-w-0 space-y-1">
 			<span class="text-sm font-medium text-slate-700">Phone</span>
-			<input class:border-red-300={!!errors.phone} class="w-full rounded-lg border-slate-300" bind:value={form.phone} />
+			<input
+				class:border-red-300={!!errors.phone}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={form.phone}
+			/>
 			{#if errors.phone}
 				<span class="block text-xs text-red-600">{errors.phone}</span>
 			{/if}
@@ -615,7 +667,8 @@
 
 		<label class="min-w-0 space-y-1 md:col-span-2">
 			<span class="text-sm font-medium text-slate-700">Notes</span>
-			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}></textarea>
+			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}
+			></textarea>
 		</label>
 
 		<div class="flex gap-3 md:col-span-2">
@@ -626,7 +679,11 @@
 			>
 				{isSubmitting ? 'Saving...' : submitLabel}
 			</button>
-			<button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium" type="button" onclick={onClose}>
+			<button
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				type="button"
+				onclick={onClose}
+			>
 				{cancelLabel}
 			</button>
 		</div>
