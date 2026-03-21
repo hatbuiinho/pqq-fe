@@ -53,14 +53,14 @@
 	};
 
 	const genderOptions: Array<{ label: string; value: Gender }> = [
-		{ label: 'Male', value: 'male' },
-		{ label: 'Female', value: 'female' }
+		{ label: 'Nam', value: 'male' },
+		{ label: 'Nữ', value: 'female' }
 	];
 
 	const defaultStatusOptions: Array<{ label: string; value: StudentStatus }> = [
-		{ label: 'Active', value: 'active' },
-		{ label: 'Inactive', value: 'inactive' },
-		{ label: 'Suspended', value: 'suspended' }
+		{ label: 'Đang học', value: 'active' },
+		{ label: 'Ngưng học', value: 'inactive' },
+		{ label: 'Tạm dừng', value: 'suspended' }
 	];
 
 	let {
@@ -77,14 +77,14 @@
 		availableClubTrainingDays = [],
 		onClose,
 		onSubmit,
-		submitLabel = 'Save student',
-		cancelLabel = 'Cancel',
+		submitLabel = 'Lưu võ sinh',
+		cancelLabel = 'Hủy',
 		isSubmitting = false,
 		showScheduleSection = true,
 		showClubSelector = true,
 		clubReadonlyName = '',
 		showStatusField = true,
-		studentCodeDisplay = 'Generated on sync',
+		studentCodeDisplay = 'Sẽ tạo khi đồng bộ',
 		showStudentCode = true,
 		statusOptions = defaultStatusOptions
 	}: Props = $props();
@@ -98,6 +98,7 @@
 	let isAvatarPreviewModalOpen = $state(false);
 	let avatarPreviewUrl = $state('');
 	let avatarPreviewTitle = $state('');
+	let suppressAvatarReloadUntil = $state(0);
 
 	function toggleCustomScheduleDay(weekday: Weekday) {
 		const allowedDays = new Set(availableClubTrainingDays);
@@ -130,18 +131,77 @@
 		try {
 			isLoadingAvatars = true;
 			avatarError = '';
-			avatarDrafts = await listStudentAvatarDrafts(targetStudentId);
+			await refreshAvatarDrafts(targetStudentId);
 			if (!navigator.onLine) {
 				avatars = [];
 				return;
 			}
-			avatars = await studentMediaApi.listAvatars(targetStudentId);
+			await refreshAvatarsIncremental(targetStudentId);
 			await syncStudentAvatarCache(targetStudentId, { emitEvent: false });
 		} catch (error) {
-			avatarError = error instanceof Error ? error.message : 'Failed to load avatars.';
+			avatarError = error instanceof Error ? error.message : 'Không thể tải danh sách avatar.';
 		} finally {
 			isLoadingAvatars = false;
 		}
+	}
+
+	function suppressAvatarReloadWindow(durationMs = 2000) {
+		suppressAvatarReloadUntil = Date.now() + durationMs;
+	}
+
+	function isSameAvatar(left: StudentAvatar, right: StudentAvatar): boolean {
+		return (
+			left.id === right.id &&
+			left.isPrimary === right.isPrimary &&
+			left.fileSize === right.fileSize &&
+			left.originalFilename === right.originalFilename &&
+			left.downloadUrl === right.downloadUrl &&
+			left.thumbnailUrl === right.thumbnailUrl
+		);
+	}
+
+	async function refreshAvatarDrafts(targetStudentId: string) {
+		avatarDrafts = await listStudentAvatarDrafts(targetStudentId);
+	}
+
+	async function refreshAvatarsIncremental(targetStudentId: string) {
+		const nextAvatars = await studentMediaApi.listAvatars(targetStudentId);
+		const existingById = new Map(avatars.map((avatar) => [avatar.id, avatar]));
+		const merged = nextAvatars.map((avatar) => {
+			const existing = existingById.get(avatar.id);
+			if (existing && isSameAvatar(existing, avatar)) {
+				return existing;
+			}
+			return avatar;
+		});
+
+		if (avatars.length === merged.length && avatars.every((avatar, index) => avatar === merged[index])) {
+			return;
+		}
+
+		avatars = merged;
+	}
+
+	function upsertAvatarLocally(nextAvatar: StudentAvatar) {
+		const existingIndex = avatars.findIndex((avatar) => avatar.id === nextAvatar.id);
+		let nextItems =
+			existingIndex === -1
+				? [nextAvatar, ...avatars]
+				: avatars.map((avatar, index) => (index === existingIndex ? nextAvatar : avatar));
+
+		if (nextAvatar.isPrimary) {
+			nextItems = nextItems.map((avatar) => ({ ...avatar, isPrimary: avatar.id === nextAvatar.id }));
+		}
+
+		avatars = nextItems;
+	}
+
+	function markPrimaryLocally(mediaId: string) {
+		avatars = avatars.map((avatar) => ({ ...avatar, isPrimary: avatar.id === mediaId }));
+	}
+
+	function removeAvatarLocally(mediaId: string) {
+		avatars = avatars.filter((avatar) => avatar.id !== mediaId);
 	}
 
 	async function handleAvatarInputChange(event: Event) {
@@ -154,15 +214,20 @@
 		try {
 			isUploadingAvatar = true;
 			avatarError = '';
-			await enqueueStudentAvatarDraft(studentId, file);
-			await loadAvatars(studentId);
-			toastSuccess(
-				navigator.onLine
-					? 'Avatar added to upload queue.'
-					: 'Avatar saved locally and will upload when back online.'
-			);
+			if (navigator.onLine) {
+				const uploadedAvatar = await studentMediaApi.uploadAvatar(studentId, file);
+				upsertAvatarLocally(uploadedAvatar);
+				suppressAvatarReloadWindow();
+				await syncStudentAvatarCache(studentId);
+				emitDataChanged('avatar-sync');
+				toastSuccess('Đã tải lên avatar.');
+			} else {
+				await enqueueStudentAvatarDraft(studentId, file);
+				await refreshAvatarDrafts(studentId);
+				toastSuccess('Avatar đã lưu cục bộ và sẽ tự tải lên khi có mạng.');
+			}
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to upload avatar.';
+			const message = error instanceof Error ? error.message : 'Không thể tải lên avatar.';
 			avatarError = message;
 			toastError(message);
 		} finally {
@@ -176,13 +241,15 @@
 
 		try {
 			avatarError = '';
-			await studentMediaApi.setPrimaryAvatar(studentId, mediaId);
+			const updatedAvatar = await studentMediaApi.setPrimaryAvatar(studentId, mediaId);
+			upsertAvatarLocally(updatedAvatar);
+			markPrimaryLocally(updatedAvatar.id);
+			suppressAvatarReloadWindow();
 			await syncStudentAvatarCache(studentId);
-			await loadAvatars(studentId);
 			emitDataChanged('avatar-sync');
-			toastSuccess('Primary avatar updated.');
+			toastSuccess('Đã cập nhật avatar chính.');
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to update primary avatar.';
+			const message = error instanceof Error ? error.message : 'Không thể cập nhật avatar chính.';
 			avatarError = message;
 			toastError(message);
 		}
@@ -194,12 +261,13 @@
 		try {
 			avatarError = '';
 			await studentMediaApi.deleteAvatar(studentId, mediaId);
+			removeAvatarLocally(mediaId);
+			suppressAvatarReloadWindow();
 			await syncStudentAvatarCache(studentId);
-			await loadAvatars(studentId);
 			emitDataChanged('avatar-sync');
-			toastSuccess('Avatar deleted.');
+			toastSuccess('Đã xóa avatar.');
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to delete avatar.';
+			const message = error instanceof Error ? error.message : 'Không thể xóa avatar.';
 			avatarError = message;
 			toastError(message);
 		}
@@ -208,15 +276,15 @@
 	async function handleRetryDraft(queueId: string) {
 		await retryStudentAvatarDraft(queueId);
 		if (studentId) {
-			await loadAvatars(studentId);
+			await refreshAvatarDrafts(studentId);
 		}
-		toastSuccess('Avatar upload queued again.');
+		toastSuccess('Đã đưa avatar vào hàng đợi tải lên lại.');
 	}
 
 	async function handleRemoveDraft(queueId: string) {
 		await removeStudentAvatarDraft(queueId);
 		if (studentId) {
-			await loadAvatars(studentId);
+			await refreshAvatarDrafts(studentId);
 		}
 	}
 
@@ -236,14 +304,19 @@
 	onMount(() =>
 		subscribeDataChanged((source) => {
 			if ((source !== 'avatar' && source !== 'avatar-sync') || !open || !studentId) return;
-			void loadAvatars(studentId);
+			if (Date.now() < suppressAvatarReloadUntil) {
+				void refreshAvatarDrafts(studentId);
+				return;
+			}
+			if (source === 'avatar') {
+				void refreshAvatarDrafts(studentId);
+				return;
+			}
+			void refreshAvatarsIncremental(studentId);
 		})
 	);
 
 	$effect(() => {
-		open;
-		studentId;
-
 		if (open && studentId) {
 			void loadAvatars(studentId);
 			return;
@@ -262,8 +335,8 @@
 			<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
 				<div class="flex items-center justify-between gap-3">
 					<div class="space-y-1">
-						<h3 class="text-sm font-semibold text-slate-800">Avatar</h3>
-						<p class="text-xs text-slate-500">Upload JPG, PNG, or WebP up to 5MB.</p>
+						<h3 class="text-sm font-semibold text-slate-800">Ảnh đại diện</h3>
+						<p class="text-xs text-slate-500">Hỗ trợ JPG, PNG hoặc WebP, tối đa 5MB.</p>
 					</div>
 					<button
 						class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
@@ -271,7 +344,7 @@
 						onclick={triggerAvatarPicker}
 						disabled={isUploadingAvatar}
 					>
-						{isUploadingAvatar ? 'Uploading...' : 'Upload avatar'}
+						{isUploadingAvatar ? 'Đang tải lên...' : 'Tải lên avatar'}
 					</button>
 					<input
 						bind:this={avatarInput}
@@ -287,19 +360,19 @@
 				{/if}
 
 				{#if isLoadingAvatars}
-					<p class="text-sm text-slate-500">Loading avatars...</p>
+					<p class="text-sm text-slate-500">Đang tải avatar...</p>
 				{:else if avatarDrafts.length === 0 && avatars.length === 0}
-					<p class="text-sm text-slate-500">No avatar uploaded yet.</p>
+					<p class="text-sm text-slate-500">Chưa có avatar nào được tải lên.</p>
 				{:else}
 					<div class="space-y-4">
 						{#if avatarDrafts.length > 0}
 							<div class="space-y-2">
 								<div class="flex items-center justify-between gap-3">
 									<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
-										Local queue
+										Hàng đợi cục bộ
 									</h4>
 									<span class="text-xs text-slate-500">
-										{navigator.onLine ? 'Uploads will sync shortly' : 'Waiting for connection'}
+										{navigator.onLine ? 'Ảnh sẽ sớm được đồng bộ' : 'Đang chờ kết nối mạng'}
 									</span>
 								</div>
 								<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -347,7 +420,7 @@
 														type="button"
 														onclick={() => void handleRetryDraft(draft.id)}
 													>
-														Retry
+														Thử lại
 													</button>
 												{/if}
 												<button
@@ -355,7 +428,7 @@
 													type="button"
 													onclick={() => void handleRemoveDraft(draft.id)}
 												>
-													Remove
+													Xóa
 												</button>
 											</div>
 										</div>
@@ -367,12 +440,12 @@
 						{#if avatars.length > 0}
 							<div class="space-y-2">
 								<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
-									Uploaded avatars
+									Avatar đã tải lên
 								</h4>
 								<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 									{#each avatars as avatar (avatar.id)}
 										<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-											<div class="aspect-square overflow-hidden rounded-xl bg-slate-100">
+											<div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
 												{#if avatar.thumbnailUrl ?? avatar.downloadUrl}
 													<button
 														type="button"
@@ -399,7 +472,7 @@
 													{#if avatar.isPrimary}
 														<span
 															class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
-															>Primary</span
+															>Chính</span
 														>
 													{/if}
 												</div>
@@ -412,14 +485,14 @@
 													onclick={() => handleSetPrimaryAvatar(avatar.id)}
 													disabled={avatar.isPrimary}
 												>
-													Make primary
+													Đặt làm chính
 												</button>
 												<button
 													class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600"
 													type="button"
 													onclick={() => handleDeleteAvatar(avatar.id)}
 												>
-													Delete
+													Xóa
 												</button>
 											</div>
 										</div>
@@ -433,7 +506,7 @@
 		{/if}
 
 		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Full name *</span>
+			<span class="text-sm font-medium text-slate-700">Họ và tên *</span>
 			<input
 				class:border-red-300={!!errors.fullName}
 				class="w-full rounded-lg border-slate-300"
@@ -447,7 +520,7 @@
 
 		{#if showStudentCode}
 			<label class="min-w-0 space-y-1">
-				<span class="text-sm font-medium text-slate-700">Student code</span>
+				<span class="text-sm font-medium text-slate-700">Mã võ sinh</span>
 				<input
 					class="w-full rounded-lg border-slate-300 bg-slate-100 text-slate-500"
 					value={studentCodeDisplay}
@@ -455,21 +528,21 @@
 					disabled
 				/>
 				<span class="block text-xs text-slate-500"
-					>Backend sync will generate code in the format `PQQ-000001`.</span
+					>Hệ thống sẽ tạo mã tự động theo định dạng `PQQ-000001` khi đồng bộ.</span
 				>
 			</label>
 		{/if}
 
 		{#if showClubSelector}
 			<label class="min-w-0 space-y-1">
-				<span class="text-sm font-medium text-slate-700">Club *</span>
+				<span class="text-sm font-medium text-slate-700">CLB *</span>
 				<select
 					class:border-red-300={!!errors.clubId}
 					class="w-full rounded-lg border-slate-300"
 					bind:value={form.clubId}
 					required
 				>
-					<option value="">Select a club</option>
+					<option value="">Chọn CLB</option>
 					{#each availableClubs as club (club.id)}
 						<option value={club.id}>{club.name}</option>
 					{/each}
@@ -480,7 +553,7 @@
 			</label>
 		{:else if clubReadonlyName}
 			<label class="min-w-0 space-y-1">
-				<span class="text-sm font-medium text-slate-700">Club</span>
+				<span class="text-sm font-medium text-slate-700">CLB</span>
 				<input
 					class="w-full rounded-lg border-slate-300 bg-slate-100 text-slate-500"
 					value={clubReadonlyName}
@@ -491,13 +564,13 @@
 		{/if}
 
 		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Group</span>
+			<span class="text-sm font-medium text-slate-700">Nhóm</span>
 			<select
 				class:border-red-300={!!errors.groupId}
 				class="w-full rounded-lg border-slate-300"
 				bind:value={form.groupId}
 			>
-				<option value="">No group</option>
+				<option value="">Không có nhóm</option>
 				{#each availableGroups as group (group.id)}
 					<option value={group.id}>{group.name}</option>
 				{/each}
@@ -508,14 +581,14 @@
 		</label>
 
 		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Belt rank *</span>
+			<span class="text-sm font-medium text-slate-700">Cấp đai *</span>
 			<select
 				class:border-red-300={!!errors.beltRankId}
 				class="w-full rounded-lg border-slate-300"
 				bind:value={form.beltRankId}
 				required
 			>
-				<option value="">Select a belt rank</option>
+				<option value="">Chọn cấp đai</option>
 				{#each availableBeltRanks as beltRank (beltRank.id)}
 					<option value={beltRank.id}>{beltRank.name}</option>
 				{/each}
@@ -527,16 +600,16 @@
 
 		{#if showClubSelector}
 			<p class="text-xs text-slate-500 md:col-span-2">
-				Only synced active clubs and belt ranks can be assigned to students.
+				Chỉ CLB và cấp đai đang hoạt động, đã đồng bộ mới có thể gán cho võ sinh.
 			</p>
 		{/if}
 
 		{#if showScheduleSection}
 			<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
 				<div class="space-y-1">
-					<span class="text-sm font-medium text-slate-700">Schedule</span>
+					<span class="text-sm font-medium text-slate-700">Lịch học</span>
 					<p class="text-xs text-slate-500">
-						Students can inherit the club schedule or use a custom subset of the club training days.
+						Võ sinh có thể kế thừa lịch CLB hoặc dùng lịch tùy chỉnh theo các ngày tập của CLB.
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2">
@@ -549,18 +622,18 @@
 							bind:group={form.scheduleMode}
 							value="inherit"
 						/>
-						<span>Use club schedule</span>
+						<span>Dùng lịch CLB</span>
 					</label>
 					<label
 						class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
 					>
 						<input type="radio" name="scheduleMode" bind:group={form.scheduleMode} value="custom" />
-						<span>Custom schedule</span>
+						<span>Lịch tùy chỉnh</span>
 					</label>
 				</div>
 				<p class="text-xs text-slate-500">
-					Club training days: {formatWeekdayList(availableClubTrainingDays) ||
-						'No training days configured for this club yet.'}
+					Ngày tập của CLB: {formatWeekdayList(availableClubTrainingDays) ||
+						'CLB này chưa cấu hình ngày tập.'}
 				</p>
 				{#if form.scheduleMode === 'custom'}
 					<div class="space-y-2">
@@ -591,10 +664,10 @@
 		{/if}
 
 		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Date of birth</span>
+			<span class="text-sm font-medium text-slate-700">Ngày sinh</span>
 			<AppDatePicker
 				bind:value={form.dateOfBirth}
-				placeholder="Select date of birth"
+				placeholder="Chọn ngày sinh"
 				showAgePresets={true}
 			/>
 			{#if errors.dateOfBirth}
@@ -603,15 +676,15 @@
 		</label>
 
 		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Joined at</span>
-			<AppDatePicker bind:value={form.joinedAt} placeholder="Select joined date" />
+			<span class="text-sm font-medium text-slate-700">Ngày tham gia</span>
+			<AppDatePicker bind:value={form.joinedAt} placeholder="Chọn ngày tham gia" />
 			{#if errors.joinedAt}
 				<span class="block text-xs text-red-600">{errors.joinedAt}</span>
 			{/if}
 		</label>
 
-		<label class="min-w-0 space-y-1 md:col-span-2">
-			<span class="text-sm font-medium text-slate-700">Gender</span>
+		<label class="min-w-0 space-y-1">
+			<span class="text-sm font-medium text-slate-700">Giới tính</span>
 			<div class="flex flex-wrap gap-2 rounded-lg border border-slate-300 bg-white p-2">
 				{#each genderOptions as option (option.value)}
 					<label
@@ -622,29 +695,6 @@
 					</label>
 				{/each}
 			</div>
-		</label>
-
-		{#if showStatusField}
-			<label class="min-w-0 space-y-1">
-				<span class="text-sm font-medium text-slate-700">Status</span>
-				<select class="w-full rounded-lg border-slate-300" bind:value={form.status}>
-					{#each statusOptions as option (option.value)}
-						<option value={option.value}>{option.label}</option>
-					{/each}
-				</select>
-			</label>
-		{/if}
-
-		<label class="min-w-0 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Phone</span>
-			<input
-				class:border-red-300={!!errors.phone}
-				class="w-full rounded-lg border-slate-300"
-				bind:value={form.phone}
-			/>
-			{#if errors.phone}
-				<span class="block text-xs text-red-600">{errors.phone}</span>
-			{/if}
 		</label>
 
 		<label class="min-w-0 space-y-1">
@@ -660,13 +710,36 @@
 			{/if}
 		</label>
 
+		{#if showStatusField}
+			<label class="min-w-0 space-y-1">
+				<span class="text-sm font-medium text-slate-700">Trạng thái</span>
+				<select class="w-full rounded-lg border-slate-300" bind:value={form.status}>
+					{#each statusOptions as option (option.value)}
+						<option value={option.value}>{option.label}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
+
+		<label class="min-w-0 space-y-1">
+			<span class="text-sm font-medium text-slate-700">Số điện thoại</span>
+			<input
+				class:border-red-300={!!errors.phone}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={form.phone}
+			/>
+			{#if errors.phone}
+				<span class="block text-xs text-red-600">{errors.phone}</span>
+			{/if}
+		</label>
+
 		<label class="min-w-0 space-y-1 md:col-span-2">
-			<span class="text-sm font-medium text-slate-700">Address</span>
+			<span class="text-sm font-medium text-slate-700">Địa chỉ</span>
 			<input class="w-full rounded-lg border-slate-300" bind:value={form.address} />
 		</label>
 
 		<label class="min-w-0 space-y-1 md:col-span-2">
-			<span class="text-sm font-medium text-slate-700">Notes</span>
+			<span class="text-sm font-medium text-slate-700">Ghi chú</span>
 			<textarea class="w-full rounded-lg border-slate-300" rows="3" bind:value={form.notes}
 			></textarea>
 		</label>
@@ -677,7 +750,7 @@
 				type="submit"
 				disabled={isSubmitting}
 			>
-				{isSubmitting ? 'Saving...' : submitLabel}
+				{isSubmitting ? 'Đang lưu...' : submitLabel}
 			</button>
 			<button
 				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
@@ -690,9 +763,9 @@
 	</form>
 </AppModal>
 
-<ImagePreviewModal
-	open={isAvatarPreviewModalOpen}
-	src={avatarPreviewUrl}
-	title={avatarPreviewTitle || 'Avatar preview'}
-	onClose={closeAvatarPreview}
-/>
+	<ImagePreviewModal
+		open={isAvatarPreviewModalOpen}
+		src={avatarPreviewUrl}
+		title={avatarPreviewTitle || 'Xem trước avatar'}
+		onClose={closeAvatarPreview}
+	/>
