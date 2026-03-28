@@ -20,7 +20,6 @@
 		SyncStatusSnapshot
 	} from '$lib';
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import ToastViewport from '$lib/ui/components/ToastViewport.svelte';
 
 	let sidebarOpen = $state(false);
@@ -252,7 +251,8 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+	<link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#0f172a" />
 </svelte:head>

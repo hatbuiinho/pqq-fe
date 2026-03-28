@@ -1,6 +1,6 @@
 {
-	"name": "Martial Arts Club Manager",
-	"short_name": "MAC Manager",
+	"name": "PQQ Manager",
+	"short_name": "PQQ Manager",
 	"description": "Offline-first PWA for managing students, belt ranks, and clubs.",
 	"start_url": "/",
 	"display": "standalone",
@@ -9,15 +9,15 @@
 	"lang": "en",
 	"icons": [
 		{
-			"src": "/icons/icon-192.svg",
+			"src": "/icons/icon-192x192.png",
 			"sizes": "192x192",
-			"type": "image/svg+xml",
+			"type": "image/png",
 			"purpose": "any maskable"
 		},
 		{
-			"src": "/icons/icon-512.svg",
+			"src": "/icons/icon-512x512.png",
 			"sizes": "512x512",
-			"type": "image/svg+xml",
+			"type": "image/png",
 			"purpose": "any maskable"
 		}
 	]
