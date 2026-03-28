@@ -90,11 +90,16 @@
 	}: Props = $props();
 
 	let avatarInput = $state<HTMLInputElement | null>(null);
+	let avatarCameraInput = $state<HTMLInputElement | null>(null);
+	let avatarUploadTrigger = $state<HTMLDivElement | null>(null);
 	let avatars = $state<StudentAvatar[]>([]);
 	let avatarDrafts = $state<StudentAvatarDraft[]>([]);
 	let isLoadingAvatars = $state(false);
 	let isUploadingAvatar = $state(false);
 	let avatarError = $state('');
+	let isMobileMode = $state(false);
+	let isAvatarSourcePopoverOpen = $state(false);
+	let avatarSourcePopoverStyle = $state('');
 	let isAvatarPreviewModalOpen = $state(false);
 	let avatarPreviewUrl = $state('');
 	let avatarPreviewTitle = $state('');
@@ -125,6 +130,59 @@
 
 	function triggerAvatarPicker() {
 		avatarInput?.click();
+	}
+
+	function triggerAvatarCameraPicker() {
+		avatarCameraInput?.click();
+	}
+
+	function closeAvatarSourcePopover() {
+		isAvatarSourcePopoverOpen = false;
+		avatarSourcePopoverStyle = '';
+	}
+
+	function updateAvatarSourcePopoverPosition() {
+		if (!avatarUploadTrigger) return;
+
+		const rect = avatarUploadTrigger.getBoundingClientRect();
+		const viewportWidth = window.innerWidth;
+		const viewportHeight = window.innerHeight;
+		const minPadding = 8;
+		const preferredWidth = 192;
+		const popoverWidth = Math.min(preferredWidth, Math.max(160, viewportWidth - minPadding * 2));
+		const estimatedHeight = 96;
+
+		let left = rect.right - popoverWidth;
+		left = Math.max(minPadding, Math.min(left, viewportWidth - popoverWidth - minPadding));
+
+		let top = rect.bottom + 8;
+		if (top + estimatedHeight > viewportHeight - minPadding) {
+			top = Math.max(minPadding, rect.top - estimatedHeight - 8);
+		}
+
+		avatarSourcePopoverStyle = `top:${top}px;left:${left}px;width:${popoverWidth}px;`;
+	}
+
+	function handleUploadAvatarClick() {
+		if (!isMobileMode) {
+			triggerAvatarPicker();
+			return;
+		}
+		const nextOpen = !isAvatarSourcePopoverOpen;
+		isAvatarSourcePopoverOpen = nextOpen;
+		if (nextOpen) {
+			updateAvatarSourcePopoverPosition();
+		}
+	}
+
+	function handlePickAvatarFromCamera() {
+		closeAvatarSourcePopover();
+		triggerAvatarCameraPicker();
+	}
+
+	function handlePickAvatarFromLibrary() {
+		closeAvatarSourcePopover();
+		triggerAvatarPicker();
 	}
 
 	async function loadAvatars(targetStudentId: string) {
@@ -302,7 +360,27 @@
 	}
 
 	onMount(() =>
-		subscribeDataChanged((source) => {
+	{
+		const mediaQuery = window.matchMedia('(max-width: 767px)');
+		const applyMobileMode = () => {
+			isMobileMode = mediaQuery.matches;
+			if (!isMobileMode) {
+				closeAvatarSourcePopover();
+			}
+		};
+		applyMobileMode();
+
+		const handleOutsidePointerDown = (event: PointerEvent) => {
+			if (!isAvatarSourcePopoverOpen || !avatarUploadTrigger) return;
+			if (avatarUploadTrigger.contains(event.target as Node)) return;
+			closeAvatarSourcePopover();
+		};
+		const handleViewportChange = () => {
+			if (!isAvatarSourcePopoverOpen) return;
+			updateAvatarSourcePopoverPosition();
+		};
+
+		const handleDataChangedUnsubscribe = subscribeDataChanged((source) => {
 			if ((source !== 'avatar' && source !== 'avatar-sync') || !open || !studentId) return;
 			if (Date.now() < suppressAvatarReloadUntil) {
 				void refreshAvatarDrafts(studentId);
@@ -313,8 +391,21 @@
 				return;
 			}
 			void refreshAvatarsIncremental(studentId);
-		})
-	);
+		});
+
+		mediaQuery.addEventListener('change', applyMobileMode);
+		document.addEventListener('pointerdown', handleOutsidePointerDown);
+		window.addEventListener('resize', handleViewportChange);
+		window.addEventListener('scroll', handleViewportChange, true);
+
+		return () => {
+			handleDataChangedUnsubscribe();
+			mediaQuery.removeEventListener('change', applyMobileMode);
+			document.removeEventListener('pointerdown', handleOutsidePointerDown);
+			window.removeEventListener('resize', handleViewportChange);
+			window.removeEventListener('scroll', handleViewportChange, true);
+		};
+	});
 
 	$effect(() => {
 		if (open && studentId) {
@@ -325,32 +416,68 @@
 		avatars = [];
 		avatarDrafts = [];
 		avatarError = '';
+		closeAvatarSourcePopover();
 		closeAvatarPreview();
 	});
 </script>
 
 <AppModal {open} {title} {description} {onClose}>
-	<form class="grid w-full min-w-0 gap-4 md:grid-cols-2" onsubmit={handleSubmit}>
+	<form
+		class="grid w-full max-w-full min-w-0 overflow-x-hidden gap-4 md:grid-cols-2"
+		onsubmit={handleSubmit}
+	>
 		{#if studentId}
-			<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-				<div class="flex items-center justify-between gap-3">
-					<div class="space-y-1">
+			<div class="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+				<div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div class="min-w-0 space-y-1">
 						<h3 class="text-sm font-semibold text-slate-800">Ảnh đại diện</h3>
 						<p class="text-xs text-slate-500">Hỗ trợ JPG, PNG hoặc WebP, tối đa 5MB.</p>
 					</div>
-					<button
-						class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
-						type="button"
-						onclick={triggerAvatarPicker}
-						disabled={isUploadingAvatar}
-					>
-						{isUploadingAvatar ? 'Đang tải lên...' : 'Tải lên avatar'}
-					</button>
+					<div class="relative shrink-0 self-start sm:self-auto" bind:this={avatarUploadTrigger}>
+						<button
+							class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+							type="button"
+							onclick={handleUploadAvatarClick}
+							disabled={isUploadingAvatar}
+						>
+							{isUploadingAvatar ? 'Đang tải lên...' : 'Tải lên avatar'}
+						</button>
+
+						{#if isMobileMode && isAvatarSourcePopoverOpen}
+							<div
+								class="fixed z-70 space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
+								style={avatarSourcePopoverStyle}
+							>
+								<button
+									type="button"
+									class="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+									onclick={handlePickAvatarFromCamera}
+								>
+									Chụp ảnh
+								</button>
+								<button
+									type="button"
+									class="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+									onclick={handlePickAvatarFromLibrary}
+								>
+									Chọn từ thư viện
+								</button>
+							</div>
+						{/if}
+					</div>
 					<input
 						bind:this={avatarInput}
 						class="hidden"
 						type="file"
 						accept="image/jpeg,image/png,image/webp"
+						onchange={handleAvatarInputChange}
+					/>
+					<input
+						bind:this={avatarCameraInput}
+						class="hidden"
+						type="file"
+						accept="image/jpeg,image/png,image/webp"
+						capture="environment"
 						onchange={handleAvatarInputChange}
 					/>
 				</div>
@@ -375,9 +502,9 @@
 										{navigator.onLine ? 'Ảnh sẽ sớm được đồng bộ' : 'Đang chờ kết nối mạng'}
 									</span>
 								</div>
-								<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+								<div class="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
 									{#each avatarDrafts as draft (draft.id)}
-										<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+										<div class="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
 											<div class="aspect-square overflow-hidden rounded-xl bg-slate-100">
 												<button
 													type="button"
@@ -392,8 +519,8 @@
 												</button>
 											</div>
 											<div class="space-y-1">
-												<div class="flex items-center justify-between gap-2">
-													<span class="truncate text-sm font-medium text-slate-800"
+												<div class="min-w-0 flex items-center justify-between gap-2">
+													<span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800"
 														>{draft.fileName}</span
 													>
 													<span
@@ -413,7 +540,7 @@
 													<p class="text-xs text-red-600">{draft.error}</p>
 												{/if}
 											</div>
-											<div class="flex gap-2">
+											<div class="flex flex-wrap gap-2">
 												{#if draft.status === 'failed'}
 													<button
 														class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
@@ -442,9 +569,9 @@
 								<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
 									Avatar đã tải lên
 								</h4>
-								<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+								<div class="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
 									{#each avatars as avatar (avatar.id)}
-										<div class="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+										<div class="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
 											<div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
 												{#if avatar.thumbnailUrl ?? avatar.downloadUrl}
 													<button
@@ -465,8 +592,8 @@
 												{/if}
 											</div>
 											<div class="space-y-1">
-												<div class="flex items-center justify-between gap-2">
-													<span class="truncate text-sm font-medium text-slate-800"
+												<div class="min-w-0 flex items-center justify-between gap-2">
+													<span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-800"
 														>{avatar.originalFilename}</span
 													>
 													{#if avatar.isPrimary}
@@ -478,7 +605,7 @@
 												</div>
 												<p class="text-xs text-slate-500">{formatFileSize(avatar.fileSize)}</p>
 											</div>
-											<div class="flex gap-2">
+											<div class="flex flex-wrap gap-2">
 												<button
 													class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
 													type="button"
@@ -605,7 +732,7 @@
 		{/if}
 
 		{#if showScheduleSection}
-			<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+			<div class="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
 				<div class="space-y-1">
 					<span class="text-sm font-medium text-slate-700">Lịch học</span>
 					<p class="text-xs text-slate-500">
@@ -637,7 +764,7 @@
 				</p>
 				{#if form.scheduleMode === 'custom'}
 					<div class="space-y-2">
-						<div class="flex flex-wrap gap-2">
+						<div class="flex min-w-0 flex-wrap gap-2">
 							{#each WEEKDAY_OPTIONS as option (option.value)}
 								<button
 									type="button"
@@ -668,7 +795,7 @@
 			<AppDatePicker
 				bind:value={form.dateOfBirth}
 				placeholder="Chọn ngày sinh"
-				showAgePresets={true}
+				showYearPresets={true}
 			/>
 			{#if errors.dateOfBirth}
 				<span class="block text-xs text-red-600">{errors.dateOfBirth}</span>
@@ -744,7 +871,7 @@
 			></textarea>
 		</label>
 
-		<div class="flex gap-3 md:col-span-2">
+		<div class="min-w-0 flex flex-wrap gap-3 md:col-span-2">
 			<button
 				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
 				type="submit"

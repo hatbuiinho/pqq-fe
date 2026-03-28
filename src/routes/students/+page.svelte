@@ -149,6 +149,10 @@
 	let bulkScheduleDays = $state<Weekday[]>([]);
 	let bulkActionError = $state('');
 	let isApplyingBulkAction = $state(false);
+	let pendingOpenStudentCode = $state('');
+	let pendingOpenStudentId = $state('');
+	let shouldAutoOpenStudent = $state(false);
+	let hasHandledDeepLinkOpen = $state(false);
 
 	const clubMap = $derived.by(() => new Map(clubs.map((club) => [club.id, club.name])));
 	const groupMap = $derived.by(() => new Map(clubGroups.map((group) => [group.id, group.name])));
@@ -388,6 +392,10 @@
 	});
 
 	onMount(() => {
+		const params = new URLSearchParams(window.location.search);
+		pendingOpenStudentCode = (params.get('studentCode') ?? '').trim();
+		pendingOpenStudentId = (params.get('studentId') ?? '').trim();
+		shouldAutoOpenStudent = params.get('open') === '1';
 		void loadData();
 
 		return subscribeDataChanged((source) => {
@@ -454,11 +462,53 @@
 			clubSchedules = clubScheduleRows;
 			studentScheduleProfiles = studentScheduleProfileRows;
 			studentSchedules = studentScheduleRows;
+			applyDeepLinkOpen();
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Failed to load students.');
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	function clearDeepLinkQueryParams() {
+		const url = new URL(window.location.href);
+		url.searchParams.delete('studentCode');
+		url.searchParams.delete('studentId');
+		url.searchParams.delete('open');
+		window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+	}
+
+	function applyDeepLinkOpen() {
+		if (hasHandledDeepLinkOpen || !shouldAutoOpenStudent) return;
+
+		let targetStudent: Student | undefined;
+		if (pendingOpenStudentCode) {
+			const codeQuery = normalizeSearchText(pendingOpenStudentCode);
+			targetStudent = students.find(
+				(student) =>
+					!student.deletedAt &&
+					normalizeSearchText(student.studentCode ?? '') === codeQuery
+			);
+		}
+
+		if (!targetStudent && pendingOpenStudentId) {
+			targetStudent = students.find(
+				(student) => !student.deletedAt && student.id === pendingOpenStudentId
+			);
+		}
+
+		hasHandledDeepLinkOpen = true;
+		shouldAutoOpenStudent = false;
+
+		if (!targetStudent) {
+			toastError('Không tìm thấy võ sinh theo liên kết đã mở.');
+			clearDeepLinkQueryParams();
+			return;
+		}
+
+		search = targetStudent.studentCode ?? targetStudent.fullName;
+		startEdit(targetStudent);
+		clearDeepLinkQueryParams();
 	}
 
 	function resetForm() {

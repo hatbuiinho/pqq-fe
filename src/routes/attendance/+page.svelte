@@ -173,6 +173,7 @@
 	let deleteTargetSessionId = $state('');
 	let showMobileDetail = $state(false);
 	let suppressLocalRefresh = $state(false);
+	let suppressLocalRefreshUntil = $state(0);
 	let suppressSyncRefreshUntil = $state(0);
 	let sessionNoteDraft = $state('');
 	let selectedStudentNoteId = $state('');
@@ -255,13 +256,11 @@
 	const filteredItems = $derived.by(() => {
 		const query = normalizeSearchText(studentSearch);
 		return items.filter(({ student, record }) => {
-			const beltRankName = beltRankMap.get(student.beltRankId) ?? '';
 			const groupName = groupMap.get(student.groupId ?? '') ?? '';
 			const matchesQuery =
 				!query ||
 				normalizeSearchText(student.fullName).includes(query) ||
 				normalizeSearchText(student.studentCode ?? '').includes(query) ||
-				normalizeSearchText(beltRankName).includes(query) ||
 				normalizeSearchText(groupName).includes(query);
 			const matchesGroup = !selectedGroupId || student.groupId === selectedGroupId;
 			const matchesGender = !selectedGender || student.gender === selectedGender;
@@ -385,12 +384,19 @@
 			if (source === 'sync' && Date.now() < suppressSyncRefreshUntil) {
 				return;
 			}
-			if (source === 'local' && suppressLocalRefresh) {
+			if (
+				source === 'local' &&
+				(suppressLocalRefresh || Date.now() < suppressLocalRefreshUntil)
+			) {
 				return;
 			}
 			void refreshCurrentView();
 		});
 	});
+
+	function suppressLocalRefreshWindow(durationMs = 4000) {
+		suppressLocalRefreshUntil = Date.now() + durationMs;
+	}
 
 	function suppressSyncRefreshWindow(durationMs = 4000) {
 		suppressSyncRefreshUntil = Date.now() + durationMs;
@@ -769,6 +775,8 @@
 		try {
 			isSavingStudentDetail = true;
 			suppressLocalRefresh = true;
+			suppressLocalRefreshWindow();
+			suppressSyncRefreshWindow();
 			await studentUseCases.update(selectedStudentDetailId, {
 				fullName: studentDetailForm.fullName,
 				dateOfBirth: studentDetailForm.dateOfBirth || undefined,

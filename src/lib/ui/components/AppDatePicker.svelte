@@ -6,8 +6,11 @@
 		placeholder?: string;
 		disabled?: boolean;
 		showAgePresets?: boolean;
+		showYearPresets?: boolean;
 		minAge?: number;
 		maxAge?: number;
+		minYear?: number;
+		maxYear?: number;
 		iconOnly?: boolean;
 	};
 
@@ -16,8 +19,11 @@
 		placeholder = 'Select date',
 		disabled = false,
 		showAgePresets = false,
+		showYearPresets = false,
 		minAge = 8,
 		maxAge = 50,
+		minYear,
+		maxYear,
 		iconOnly = false
 	}: Props = $props();
 
@@ -74,20 +80,33 @@
 		return new Date(now.getFullYear() - age, now.getMonth(), now.getDate(), 12, 0, 0);
 	}
 
-	const agePresetOptions = $derived.by(() => {
-		if (!showAgePresets) return [];
+	function createDateFromYear(year: number): Date {
+		const base = normalizeDate(startDate) ?? new Date();
+		return new Date(year, base.getMonth(), base.getDate(), 12, 0, 0);
+	}
 
-		return Array.from({ length: maxAge - minAge + 1 }, (_, index) => {
-			const age = minAge + index;
+	const yearPresetOptions = $derived.by(() => {
+		if (!showAgePresets && !showYearPresets) return [];
+
+		const now = new Date();
+		const computedNewestYear = now.getFullYear() - minAge;
+		const computedOldestYear = now.getFullYear() - maxAge;
+		const newestYear = maxYear ?? computedNewestYear;
+		const oldestYear = minYear ?? computedOldestYear;
+		if (newestYear < oldestYear) return [];
+
+		const length = newestYear - oldestYear + 1;
+		return Array.from({ length }, (_, index) => {
+			const year = newestYear - index;
 			return {
-				age,
-				value: formatDate(createDateFromAge(age))
+				year,
+				value: formatDate(createDateFromYear(year))
 			};
 		});
 	});
 
-	function applyAgePreset(age: number) {
-		const presetDate = createDateFromAge(age);
+	function applyYearPreset(year: number) {
+		const presetDate = createDateFromYear(year);
 		startDate = presetDate;
 		isOpen = false;
 	}
@@ -132,10 +151,10 @@
 		</button>
 	</DatePicker>
 
-	{#if showAgePresets}
+	{#if showAgePresets || showYearPresets}
 		<div class="-mx-1 overflow-x-auto px-1 pb-1">
 			<div class="flex min-w-max gap-2">
-				{#each agePresetOptions as option (option.age)}
+				{#each yearPresetOptions as option (option.year)}
 					<button
 						type="button"
 						class={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
@@ -143,10 +162,10 @@
 								? 'border-slate-900 bg-slate-900 text-white'
 								: 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'
 						}`}
-						onclick={() => applyAgePreset(option.age)}
+						onclick={() => applyYearPreset(option.year)}
 						{disabled}
 					>
-						{option.age} yrs
+						{option.year}
 					</button>
 				{/each}
 			</div>

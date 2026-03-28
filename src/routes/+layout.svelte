@@ -273,119 +273,125 @@
 				sidebarOpen ? 'translate-x-0' : '-translate-x-full'
 			}`}
 		>
-			<div class="flex h-full flex-col overflow-hidden">
+			<div class="flex h-full min-h-0 flex-col">
 				<div class="relative border-b border-white/10 px-5 py-5">
 					<h1 class="relative mt-2 text-xl font-bold tracking-tight text-white">
 						Phật Quang Quyền
 					</h1>
 				</div>
 
-				<nav class="flex-1 space-y-2 p-3">
-					<p class="px-3 pt-2 text-[11px] font-semibold tracking-[0.18em] text-white/38 uppercase">
-						Khu Vực Làm Việc
-					</p>
-					{#each navItems as item (item.href)}
-						{@const isActive =
-							page.url.pathname === item.href ||
-							(item.href !== '/' && page.url.pathname.startsWith(item.href))}
-						<a
-							href={resolve(item.href)}
-							class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
-								isActive
-									? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-									: 'text-white/68 hover:bg-white/6 hover:text-white'
-							}`}
-							onclick={closeSidebar}
-						>
-							<span
-								class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
-							></span>
-							<span
-								class={`inline-flex size-10 items-center justify-center rounded-xl border transition ${
+				<div class="min-h-0 flex-1 overflow-y-auto">
+					<nav class="space-y-2 p-3">
+						<p class="px-3 pt-2 text-[11px] font-semibold tracking-[0.18em] text-white/38 uppercase">
+							Khu Vực Làm Việc
+						</p>
+						{#each navItems as item (item.href)}
+							{@const isActive =
+								page.url.pathname === item.href ||
+								(item.href !== '/' && page.url.pathname.startsWith(item.href))}
+							<a
+								href={resolve(item.href)}
+								class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
 									isActive
-										? 'border-white/10 bg-white/8 text-white'
-										: 'border-white/6 bg-slate-950/10 text-white/72 group-hover:border-white/10 group-hover:bg-white/6'
+										? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
+										: 'text-white/68 hover:bg-white/6 hover:text-white'
 								}`}
+								onclick={closeSidebar}
 							>
-								<span class={`${item.icon} size-5`}></span>
-							</span>
-							<span class="flex-1">{item.label}</span>
-							{#if isActive}
 								<span
-									class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
+									class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
 								></span>
-							{/if}
-						</a>
-					{/each}
-				</nav>
-
-				<div class="border-t border-white/10 p-4">
-					<div class="space-y-4 rounded-2xl bg-white/6 p-4">
-						<div class="flex items-center justify-between gap-3">
-							<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Đồng Bộ</p>
-							<span
-								class={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getSyncBadgeClass()}`}
-							>
-								{getSyncLabel()}
-							</span>
-						</div>
-
-						<div class="grid grid-cols-2 gap-2 text-sm">
-							<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Đang Chờ</p>
-								<p class="mt-1 font-semibold text-white">{syncSnapshot.pendingCount}</p>
-							</div>
-							<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-								<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Lỗi</p>
-								<div class="mt-1 flex items-center justify-between gap-2">
-									<p class="font-semibold text-white">{syncSnapshot.failedCount}</p>
-									{#if syncSnapshot.failedCount > 0}
-										<button
-											type="button"
-											class="text-[11px] font-medium text-red-200 transition hover:text-white"
-											onclick={openSyncIssues}
-										>
-											Xem
-										</button>
-									{/if}
-								</div>
-							</div>
-						</div>
-
-						<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
-							<div class="flex items-center justify-between gap-3">
-								<span class="text-white/48">Lần đồng bộ gần nhất</span>
-								<span class="text-right text-white/80"
-									>{formatLastSync(syncSnapshot.lastSyncAt)}</span
+								<span
+									class={`inline-flex size-10 items-center justify-center rounded-xl border transition ${
+										isActive
+											? 'border-white/10 bg-white/8 text-white'
+											: 'border-white/6 bg-slate-950/10 text-white/72 group-hover:border-white/10 group-hover:bg-white/6'
+									}`}
 								>
-							</div>
-							{#if syncSnapshot.lastError}
-								<div class="mt-3 border-t border-white/8 pt-3">
-									<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">
-										Lỗi gần nhất
-									</p>
-									<p class="mt-1 line-clamp-2 text-sm text-red-100/90">{syncSnapshot.lastError}</p>
-								</div>
-							{/if}
-						</div>
+									<span class={`${item.icon} size-5`}></span>
+								</span>
+								<span class="flex-1">{item.label}</span>
+								{#if isActive}
+									<span
+										class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
+									></span>
+								{/if}
+							</a>
+						{/each}
+					</nav>
 
-						<div class="grid grid-cols-2 gap-2">
-							<button
-								type="button"
-								class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
-								onclick={() => void syncManager.rebaseFromServer()}
-							>
-								<span class="icon-[mdi--database-sync-outline] size-4"></span>
-								<span>Tải lại</span>
-							</button>
-							<button
-								type="button"
-								class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
-								onclick={() => void syncManager.syncNow()}
-							>
-								<span class="icon-[mdi--sync] size-4"></span>
-								<span>Đồng bộ ngay</span>
-							</button>
+					<div class="border-t border-white/10 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+						<div class="space-y-4 rounded-2xl bg-white/6 p-4">
+							<div class="flex items-center justify-between gap-3">
+								<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">
+									Đồng Bộ
+								</p>
+								<span
+									class={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getSyncBadgeClass()}`}
+								>
+									{getSyncLabel()}
+								</span>
+							</div>
+
+							<div class="grid grid-cols-2 gap-2 text-sm">
+								<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
+									<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Đang Chờ</p>
+									<p class="mt-1 font-semibold text-white">{syncSnapshot.pendingCount}</p>
+								</div>
+								<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
+									<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Lỗi</p>
+									<div class="mt-1 flex items-center justify-between gap-2">
+										<p class="font-semibold text-white">{syncSnapshot.failedCount}</p>
+										{#if syncSnapshot.failedCount > 0}
+											<button
+												type="button"
+												class="text-[11px] font-medium text-red-200 transition hover:text-white"
+												onclick={openSyncIssues}
+											>
+												Xem
+											</button>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
+								<div class="flex items-center justify-between gap-3">
+									<span class="text-white/48">Lần đồng bộ gần nhất</span>
+									<span class="text-right text-white/80"
+										>{formatLastSync(syncSnapshot.lastSyncAt)}</span
+									>
+								</div>
+								{#if syncSnapshot.lastError}
+									<div class="mt-3 border-t border-white/8 pt-3">
+										<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">
+											Lỗi gần nhất
+										</p>
+										<p class="mt-1 line-clamp-2 text-sm text-red-100/90">
+											{syncSnapshot.lastError}
+										</p>
+									</div>
+								{/if}
+							</div>
+
+							<div class="grid grid-cols-2 gap-2">
+								<button
+									type="button"
+									class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
+									onclick={() => void syncManager.rebaseFromServer()}
+								>
+									<span class="icon-[mdi--database-sync-outline] size-4"></span>
+									<span>Tải lại</span>
+								</button>
+								<button
+									type="button"
+									class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
+									onclick={() => void syncManager.syncNow()}
+								>
+									<span class="icon-[mdi--sync] size-4"></span>
+									<span>Đồng bộ ngay</span>
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
