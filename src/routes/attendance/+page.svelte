@@ -55,6 +55,21 @@
 		bgClass: string;
 	};
 
+	type BeltRankAttendanceSummaryItem = {
+		beltRankId: string;
+		label: string;
+		attendedCount: number;
+		totalCount: number;
+		order: number;
+	};
+
+type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
+	attendedStudents: Student[];
+	absentStudents: Student[];
+	excusedStudents: Student[];
+	unmarkedStudents: Student[];
+};
+
 	type SessionFormErrors = Partial<Record<'clubId' | 'sessionDate', string>>;
 
 	function formatDateLabel(value: string): string {
@@ -67,6 +82,10 @@
 		const date = new Date(`${value}T00:00:00`);
 		if (Number.isNaN(date.getTime())) return '';
 		return date.toLocaleDateString(undefined, { weekday: 'short' });
+	}
+
+	function isAttendedStatus(status: AttendanceStatus): boolean {
+		return status === 'present' || status === 'late' || status === 'left_early';
 	}
 
 	function createInitialStudentDetailForm(): StudentFormValue {
@@ -159,6 +178,8 @@
 	let setupDate = $state(getTodayIsoDate());
 	let setupNotes = $state('');
 	let isSetupModalOpen = $state(false);
+	let isSessionSummaryModalOpen = $state(false);
+	let expandedBeltRankIds = $state<string[]>([]);
 	let formErrors = $state<SessionFormErrors>({});
 	let isLoadingDetail = $state(false);
 	let isCreating = $state(false);
@@ -331,6 +352,92 @@
 				bgClass: 'bg-slate-50 border-slate-200'
 			}
 		];
+	});
+	const sessionAttendanceSummary = $derived.by(() => {
+		const totalCount = items.length;
+		const attendedCount = items.filter((item) => isAttendedStatus(item.record.attendanceStatus)).length;
+		return {
+			attendedCount,
+			totalCount,
+			ratio: totalCount > 0 ? (attendedCount / totalCount) * 100 : 0
+		};
+	});
+	const beltRankAttendanceSummary = $derived.by<BeltRankAttendanceSummaryItem[]>(() => {
+		const map = new Map<string, BeltRankAttendanceSummaryItem>();
+		for (const item of items) {
+			const beltRankId = item.student.beltRankId || 'unknown';
+			const beltRankName = beltRankMap.get(item.student.beltRankId) ?? 'Không xác định';
+			const beltRankOrder =
+				beltRanks.find((beltRank) => beltRank.id === item.student.beltRankId)?.order ?? 9999;
+			const current = map.get(beltRankId) ?? {
+				beltRankId,
+				label: beltRankName,
+				attendedCount: 0,
+				totalCount: 0,
+				order: beltRankOrder
+			};
+			current.totalCount += 1;
+			if (isAttendedStatus(item.record.attendanceStatus)) {
+				current.attendedCount += 1;
+			}
+			map.set(beltRankId, current);
+		}
+		return [...map.values()].sort((left, right) => {
+			if (left.order !== right.order) return left.order - right.order;
+			return left.label.localeCompare(right.label);
+		});
+	});
+	const beltRankAttendanceDetails = $derived.by<BeltRankAttendanceDetailItem[]>(() => {
+		const map = new Map<string, BeltRankAttendanceDetailItem>();
+		for (const item of items) {
+			const beltRankId = item.student.beltRankId || 'unknown';
+			const beltRankName = beltRankMap.get(item.student.beltRankId) ?? 'Không xác định';
+			const beltRankOrder =
+				beltRanks.find((beltRank) => beltRank.id === item.student.beltRankId)?.order ?? 9999;
+			const current = map.get(beltRankId) ?? {
+				beltRankId,
+				label: beltRankName,
+				attendedCount: 0,
+				totalCount: 0,
+				order: beltRankOrder,
+				attendedStudents: [],
+				absentStudents: [],
+				excusedStudents: [],
+				unmarkedStudents: []
+			};
+			current.totalCount += 1;
+			if (isAttendedStatus(item.record.attendanceStatus)) {
+				current.attendedCount += 1;
+				current.attendedStudents.push(item.student);
+			} else if (item.record.attendanceStatus === 'absent') {
+				current.absentStudents.push(item.student);
+			} else if (item.record.attendanceStatus === 'excused') {
+				current.excusedStudents.push(item.student);
+			} else if (item.record.attendanceStatus === 'unmarked') {
+				current.unmarkedStudents.push(item.student);
+			}
+			map.set(beltRankId, current);
+		}
+		return [...map.values()]
+			.map((entry) => ({
+				...entry,
+				attendedStudents: [...entry.attendedStudents].sort((left, right) =>
+					left.fullName.localeCompare(right.fullName)
+				),
+				absentStudents: [...entry.absentStudents].sort((left, right) =>
+					left.fullName.localeCompare(right.fullName)
+				),
+				excusedStudents: [...entry.excusedStudents].sort((left, right) =>
+					left.fullName.localeCompare(right.fullName)
+				),
+				unmarkedStudents: [...entry.unmarkedStudents].sort((left, right) =>
+					left.fullName.localeCompare(right.fullName)
+				)
+			}))
+			.sort((left, right) => {
+				if (left.order !== right.order) return left.order - right.order;
+				return left.label.localeCompare(right.label);
+			});
 	});
 	const sessionStatsMap = $derived.by(() => {
 		const map: Record<
@@ -538,6 +645,80 @@
 	function closeSetupModal() {
 		isSetupModalOpen = false;
 		formErrors = {};
+	}
+
+	function openSessionSummaryModal() {
+		expandedBeltRankIds = [];
+		isSessionSummaryModalOpen = true;
+	}
+
+	function closeSessionSummaryModal() {
+		isSessionSummaryModalOpen = false;
+	}
+
+	function buildSessionSummaryText(): string {
+		const lines: string[] = [];
+		const sessionDate = session?.sessionDate ? formatDateLabel(session.sessionDate) : '';
+		const sessionWeekday = session?.sessionDate ? formatWeekdayLabel(session.sessionDate) : '';
+		lines.push('TONG HOP DIEM DANH');
+		if (sessionClub?.name) {
+			lines.push(`CLB: ${sessionClub.name}`);
+		}
+		if (sessionDate) {
+			lines.push(`Ngay: ${sessionWeekday ? `${sessionWeekday} - ` : ''}${sessionDate}`);
+		}
+		lines.push(
+			`Tong di hoc: ${sessionAttendanceSummary.attendedCount}/${sessionAttendanceSummary.totalCount} (${sessionAttendanceSummary.ratio.toFixed(1)}%)`
+		);
+		lines.push('');
+		lines.push('Theo cap dai:');
+
+		for (const item of beltRankAttendanceDetails) {
+			lines.push(`- ${item.label}: ${item.attendedCount}/${item.totalCount}`);
+			if (item.attendedStudents.length > 0) {
+				lines.push(`  + Di hoc: ${item.attendedStudents.length}`);
+			}
+			if (item.absentStudents.length > 0) {
+				lines.push(`  + Vang: ${item.absentStudents.length}`);
+			}
+			if (item.excusedStudents.length > 0) {
+				lines.push(`  + Co phep: ${item.excusedStudents.length}`);
+			}
+			if (item.unmarkedStudents.length > 0) {
+				lines.push(`  + Chua diem danh: ${item.unmarkedStudents.length}`);
+			}
+		}
+
+		return lines.join('\n');
+	}
+
+	async function handleCopySessionSummary() {
+		const text = buildSessionSummaryText();
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(text);
+			} else {
+				const textarea = document.createElement('textarea');
+				textarea.value = text;
+				textarea.style.position = 'fixed';
+				textarea.style.opacity = '0';
+				document.body.appendChild(textarea);
+				textarea.select();
+				document.execCommand('copy');
+				textarea.remove();
+			}
+			toastSuccess('Đã copy summary.');
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể copy summary.');
+		}
+	}
+
+	function toggleBeltRankDetail(beltRankId: string) {
+		if (expandedBeltRankIds.includes(beltRankId)) {
+			expandedBeltRankIds = expandedBeltRankIds.filter((id) => id !== beltRankId);
+			return;
+		}
+		expandedBeltRankIds = [...expandedBeltRankIds, beltRankId];
 	}
 
 	function validateSetupForm(): boolean {
@@ -1281,6 +1462,14 @@
 							</span>
 							<button
 								type="button"
+								class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+								onclick={openSessionSummaryModal}
+							>
+								<span class="icon-[mdi--chart-box-outline] size-4"></span>
+								<span>Summary</span>
+							</button>
+							<button
+								type="button"
 								class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
 								onclick={handleMarkAllPresent}
 								disabled={isCompleted || isApplyingBulk || isChangingStatus}
@@ -1557,6 +1746,173 @@
 		{/if}
 	</section>
 </main>
+
+<AppModal
+	open={isSessionSummaryModalOpen}
+	title="Tổng hợp điểm danh"
+	description="Thống kê nhanh theo buổi điểm danh hiện tại."
+	size="md"
+	onClose={closeSessionSummaryModal}
+>
+	<div class="space-y-4">
+		<div class="flex justify-end">
+			<button
+				type="button"
+				class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+				onclick={handleCopySessionSummary}
+			>
+				<span class="icon-[mdi--content-copy] size-4"></span>
+				<span>Copy summary</span>
+			</button>
+		</div>
+		<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+			<div class="flex items-center justify-between gap-3">
+				<div class="flex items-center gap-2">
+					<span
+						class="inline-flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+					>
+						<span class="icon-[mdi--school-outline] size-5"></span>
+					</span>
+					<p class="text-sm font-semibold text-emerald-800">Tổng số đi học</p>
+				</div>
+				<p class="text-xl font-bold text-emerald-800">
+					{sessionAttendanceSummary.attendedCount}/{sessionAttendanceSummary.totalCount}
+				</p>
+			</div>
+			<p class="mt-2 text-sm text-emerald-700">
+				Tỷ lệ chuyên cần: {sessionAttendanceSummary.ratio.toFixed(1)}%
+			</p>
+		</div>
+
+		<div class="space-y-2">
+			<p class="text-sm font-semibold text-slate-700">Theo cấp đai</p>
+			{#if beltRankAttendanceDetails.length === 0}
+				<p class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+					Chưa có dữ liệu võ sinh trong buổi này.
+				</p>
+			{:else}
+				<div class="space-y-2">
+					{#each beltRankAttendanceDetails as item (item.beltRankId)}
+						<div class="rounded-xl border border-slate-200 bg-white">
+							<button
+								type="button"
+								class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+								onclick={() => toggleBeltRankDetail(item.beltRankId)}
+							>
+								<div class="flex min-w-0 items-center gap-2">
+									<span
+										class="inline-flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-700"
+									>
+										<span class="icon-[mdi--karate] size-4"></span>
+									</span>
+									<span class="truncate text-sm font-medium text-slate-800">{item.label}</span>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-sm font-semibold text-slate-900">
+										{item.attendedCount}/{item.totalCount}
+									</span>
+									<span
+										class={`icon-[mdi--chevron-down] size-4 text-slate-500 transition ${
+											expandedBeltRankIds.includes(item.beltRankId) ? 'rotate-180' : ''
+										}`}
+									></span>
+								</div>
+							</button>
+							{#if expandedBeltRankIds.includes(item.beltRankId)}
+								<div class="space-y-3 border-t border-slate-200 px-3 py-3">
+									{#if item.attendedStudents.length > 0}
+										<div class="space-y-2">
+											<p class="text-xs font-semibold tracking-[0.12em] text-emerald-700 uppercase">
+												Võ sinh đi học ({item.attendedStudents.length})
+											</p>
+											<div class="space-y-1.5">
+												{#each item.attendedStudents as student (student.id)}
+													<div class="flex items-center gap-2 rounded-lg bg-emerald-50 px-2 py-1.5">
+														<StudentAvatarThumb
+															name={student.fullName}
+															src={avatarUrls[student.id]}
+															sizeClass="size-8"
+														/>
+														<p class="truncate text-sm font-medium text-emerald-800">
+															{student.fullName}
+														</p>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+									{#if item.absentStudents.length > 0}
+										<div class="space-y-2">
+											<p class="text-xs font-semibold tracking-[0.12em] text-rose-700 uppercase">
+												Võ sinh vắng ({item.absentStudents.length})
+											</p>
+											<div class="space-y-1.5">
+												{#each item.absentStudents as student (student.id)}
+													<div class="flex items-center gap-2 rounded-lg bg-rose-50 px-2 py-1.5">
+														<StudentAvatarThumb
+															name={student.fullName}
+															src={avatarUrls[student.id]}
+															sizeClass="size-8"
+														/>
+														<p class="truncate text-sm font-medium text-rose-800">
+															{student.fullName}
+														</p>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+									{#if item.excusedStudents.length > 0}
+										<div class="space-y-2">
+											<p class="text-xs font-semibold tracking-[0.12em] text-sky-700 uppercase">
+												Võ sinh có phép ({item.excusedStudents.length})
+											</p>
+											<div class="space-y-1.5">
+												{#each item.excusedStudents as student (student.id)}
+													<div class="flex items-center gap-2 rounded-lg bg-sky-50 px-2 py-1.5">
+														<StudentAvatarThumb
+															name={student.fullName}
+															src={avatarUrls[student.id]}
+															sizeClass="size-8"
+														/>
+														<p class="truncate text-sm font-medium text-sky-800">
+															{student.fullName}
+														</p>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+									{#if item.unmarkedStudents.length > 0}
+										<div class="space-y-2">
+											<p class="text-xs font-semibold tracking-[0.12em] text-slate-700 uppercase">
+												Chưa điểm danh ({item.unmarkedStudents.length})
+											</p>
+											<div class="space-y-1.5">
+												{#each item.unmarkedStudents as student (student.id)}
+													<div class="flex items-center gap-2 rounded-lg bg-slate-100 px-2 py-1.5">
+														<StudentAvatarThumb
+															name={student.fullName}
+															src={avatarUrls[student.id]}
+															sizeClass="size-8"
+														/>
+														<p class="truncate text-sm font-medium text-slate-700">
+															{student.fullName}
+														</p>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+</AppModal>
 
 <AppModal
 	open={isSetupModalOpen}
