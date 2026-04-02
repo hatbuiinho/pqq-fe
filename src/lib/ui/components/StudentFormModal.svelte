@@ -11,6 +11,7 @@
 	import type { StudentAvatarDraft } from '$lib/app/student-avatar-offline';
 	import {
 		enqueueStudentAvatarDraft,
+		getStudentAvatarPreviewUrl,
 		listStudentAvatarDrafts,
 		removeStudentAvatarDraft,
 		retryStudentAvatarDraft,
@@ -94,6 +95,7 @@
 	let avatarUploadTrigger = $state<HTMLDivElement | null>(null);
 	let avatars = $state<StudentAvatar[]>([]);
 	let avatarDrafts = $state<StudentAvatarDraft[]>([]);
+	let offlineAvatarPreviewUrl = $state('');
 	let isLoadingAvatars = $state(false);
 	let isUploadingAvatar = $state(false);
 	let avatarError = $state('');
@@ -189,9 +191,11 @@
 		try {
 			isLoadingAvatars = true;
 			avatarError = '';
+			offlineAvatarPreviewUrl = '';
 			await refreshAvatarDrafts(targetStudentId);
 			if (!navigator.onLine) {
 				avatars = [];
+				offlineAvatarPreviewUrl = await getStudentAvatarPreviewUrl(targetStudentId);
 				return;
 			}
 			await refreshAvatarsIncremental(targetStudentId);
@@ -415,6 +419,7 @@
 
 		avatars = [];
 		avatarDrafts = [];
+		offlineAvatarPreviewUrl = '';
 		avatarError = '';
 		closeAvatarSourcePopover();
 		closeAvatarPreview();
@@ -488,7 +493,7 @@
 
 				{#if isLoadingAvatars}
 					<p class="text-sm text-slate-500">Đang tải avatar...</p>
-				{:else if avatarDrafts.length === 0 && avatars.length === 0}
+				{:else if avatarDrafts.length === 0 && avatars.length === 0 && !offlineAvatarPreviewUrl}
 					<p class="text-sm text-slate-500">Chưa có avatar nào được tải lên.</p>
 				{:else}
 					<div class="space-y-4">
@@ -560,6 +565,36 @@
 											</div>
 										</div>
 									{/each}
+								</div>
+							</div>
+						{/if}
+
+						{#if !navigator.onLine && offlineAvatarPreviewUrl && avatars.length === 0}
+							<div class="space-y-2">
+								<h4 class="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
+									Avatar cục bộ
+								</h4>
+								<div class="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+									<div class="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+										<div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
+											<button
+												type="button"
+												class="h-full w-full cursor-zoom-in"
+												onclick={() =>
+													openAvatarPreview(offlineAvatarPreviewUrl, 'Avatar cục bộ')
+												}
+											>
+												<img
+													class="h-full w-full object-cover"
+													src={offlineAvatarPreviewUrl}
+													alt="Avatar cục bộ"
+												/>
+											</button>
+										</div>
+										<p class="text-xs text-slate-500">
+											Đang ngoại tuyến: hiển thị từ cache cục bộ.
+										</p>
+									</div>
 								</div>
 							</div>
 						{/if}
