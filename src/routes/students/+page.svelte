@@ -84,9 +84,9 @@
 	}
 
 	const statusOptions = [
-		{ label: 'Active', value: 'active' },
-		{ label: 'Inactive', value: 'inactive' },
-		{ label: 'Suspended', value: 'suspended' }
+		{ label: 'Đang học', value: 'active' },
+		{ label: 'Ngưng học', value: 'inactive' },
+		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
 
 	let students = $state<Student[]>([]);
@@ -108,6 +108,7 @@
 	let selectedClubId = $state('');
 	let selectedGroupId = $state('');
 	let selectedBeltRankId = $state('');
+	let selectedStatus = $state<StudentStatus | ''>('');
 	let currentPage = $state(1);
 	let isLoading = $state(false);
 	let isSubmitting = $state(false);
@@ -227,8 +228,9 @@
 			const matchesClub = !selectedClubId || student.clubId === selectedClubId;
 			const matchesGroup = !selectedGroupId || student.groupId === selectedGroupId;
 			const matchesBeltRank = !selectedBeltRankId || student.beltRankId === selectedBeltRankId;
+			const matchesStatus = !selectedStatus || student.status === selectedStatus;
 
-			return matchesQuery && matchesClub && matchesGroup && matchesBeltRank;
+			return matchesQuery && matchesClub && matchesGroup && matchesBeltRank && matchesStatus;
 		});
 	});
 	const pageSize = 10;
@@ -305,6 +307,7 @@
 		selectedClubId;
 		selectedGroupId;
 		selectedBeltRankId;
+		selectedStatus;
 		currentPage = 1;
 	});
 
@@ -465,7 +468,7 @@
 			studentSchedules = studentScheduleRows;
 			applyDeepLinkOpen();
 		} catch (error) {
-			toastError(error instanceof Error ? error.message : 'Failed to load students.');
+			toastError(error instanceof Error ? error.message : 'Không thể tải danh sách võ sinh.');
 		} finally {
 			isLoading = false;
 		}
@@ -699,7 +702,7 @@
 					form.scheduleMode,
 					selectedCustomScheduleDays
 				);
-				toastSuccess('Student updated.');
+				toastSuccess('Đã cập nhật võ sinh.');
 			} else {
 				const createdId = await studentUseCases.create(payload);
 				await studentScheduleUseCases.save(
@@ -707,14 +710,14 @@
 					form.scheduleMode,
 					selectedCustomScheduleDays
 				);
-				toastSuccess('Student created.');
+				toastSuccess('Đã tạo võ sinh.');
 			}
 
 			resetForm();
 			isModalOpen = false;
 			await loadData();
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to save student.';
+			const message = error instanceof Error ? error.message : 'Không thể lưu võ sinh.';
 			toastError(message);
 		} finally {
 			isSubmitting = false;
@@ -736,19 +739,19 @@
 	function getStudentScheduleSummary(studentId: string, clubId: string): string {
 		const mode = studentScheduleProfileMap.get(studentId) ?? 'inherit';
 		if (mode === 'inherit') {
-			return `Club schedule • ${formatWeekdayList(clubScheduleMap.get(clubId) ?? []) || 'No days set'}`;
+			return `Theo lịch CLB • ${formatWeekdayList(clubScheduleMap.get(clubId) ?? []) || 'Chưa có ngày tập'}`;
 		}
-		return `Custom • ${formatWeekdayList(studentScheduleMap.get(studentId) ?? []) || 'No days set'}`;
+		return `Tùy chỉnh • ${formatWeekdayList(studentScheduleMap.get(studentId) ?? []) || 'Chưa có ngày tập'}`;
 	}
 
 	async function handleDelete(studentId: string) {
 		try {
 			await studentUseCases.softDelete(studentId);
-			toastSuccess('Student deleted.');
+			toastSuccess('Đã xóa võ sinh.');
 			if (editingId === studentId) resetForm();
 			await loadData();
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to delete student.';
+			const message = error instanceof Error ? error.message : 'Không thể xóa võ sinh.';
 			toastError(message);
 		}
 	}
@@ -756,10 +759,10 @@
 	async function handleRestore(studentId: string) {
 		try {
 			await studentUseCases.restore(studentId);
-			toastSuccess('Student restored locally.');
+			toastSuccess('Đã khôi phục võ sinh cục bộ.');
 			await loadData();
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to restore student.';
+			const message = error instanceof Error ? error.message : 'Không thể khôi phục võ sinh.';
 			toastError(message);
 		}
 	}
@@ -778,7 +781,7 @@
 
 	async function handleBulkActionApply() {
 		if (selectedStudents.length === 0) {
-			bulkActionError = 'Select at least one student.';
+			bulkActionError = 'Vui lòng chọn ít nhất một võ sinh.';
 			return;
 		}
 
@@ -792,17 +795,17 @@
 						selectedStudents.map((student) => student.id),
 						false
 					);
-					toastSuccess(`Deleted ${selectedStudents.length} student(s).`);
+					toastSuccess(`Đã xóa ${selectedStudents.length} võ sinh.`);
 					break;
 				case 'beltRank':
-					if (!bulkBeltRankId) throw new Error('Select a belt rank.');
+					if (!bulkBeltRankId) throw new Error('Vui lòng chọn cấp đai.');
 					await studentUseCases.bulkUpdate(
 						selectedStudents.map((student) => student.id),
 						{ beltRankId: bulkBeltRankId },
 						'pending',
 						false
 					);
-					toastSuccess(`Updated belt rank for ${selectedStudents.length} student(s).`);
+					toastSuccess(`Đã cập nhật cấp đai cho ${selectedStudents.length} võ sinh.`);
 					break;
 				case 'status':
 					await studentUseCases.bulkUpdate(
@@ -811,12 +814,12 @@
 						'pending',
 						false
 					);
-					toastSuccess(`Updated status for ${selectedStudents.length} student(s).`);
+					toastSuccess(`Đã cập nhật trạng thái cho ${selectedStudents.length} võ sinh.`);
 					break;
 				case 'group':
 					if (!singleSelectedClubId) {
 						throw new Error(
-							'Bulk group update requires all selected students to belong to the same club.'
+							'Đổi nhóm hàng loạt yêu cầu các võ sinh được chọn thuộc cùng một CLB.'
 						);
 					}
 					await studentUseCases.bulkUpdate(
@@ -825,10 +828,10 @@
 						'pending',
 						false
 					);
-					toastSuccess(`Updated group for ${selectedStudents.length} student(s).`);
+					toastSuccess(`Đã cập nhật nhóm cho ${selectedStudents.length} võ sinh.`);
 					break;
 				case 'club':
-					if (!bulkClubId) throw new Error('Select a club.');
+					if (!bulkClubId) throw new Error('Vui lòng chọn CLB.');
 					await studentUseCases.bulkUpdate(
 						selectedStudents.map((student) => student.id),
 						{ clubId: bulkClubId, groupId: '' },
@@ -841,19 +844,17 @@
 						[],
 						false
 					);
-					toastSuccess(
-						`Updated club for ${selectedStudents.length} student(s). Group was cleared and schedule reset to inherit.`
-					);
+					toastSuccess(`Đã cập nhật CLB cho ${selectedStudents.length} võ sinh.`);
 					break;
 				case 'schedule':
 					if (bulkScheduleMode === 'custom') {
 						if (!singleSelectedClubId) {
 							throw new Error(
-								'Bulk custom schedule requires all selected students to belong to the same club.'
+								'Cập nhật lịch tùy chỉnh hàng loạt yêu cầu các võ sinh thuộc cùng một CLB.'
 							);
 						}
 						if (bulkScheduleDays.length === 0) {
-							throw new Error('Select at least one training day for custom schedule.');
+							throw new Error('Vui lòng chọn ít nhất một ngày tập cho lịch tùy chỉnh.');
 						}
 					}
 					await studentScheduleUseCases.bulkSave(
@@ -862,7 +863,7 @@
 						bulkScheduleMode === 'custom' ? bulkScheduleDays : [],
 						false
 					);
-					toastSuccess(`Updated schedule for ${selectedStudents.length} student(s).`);
+					toastSuccess(`Đã cập nhật lịch học cho ${selectedStudents.length} võ sinh.`);
 					break;
 			}
 
@@ -871,7 +872,7 @@
 			closeBulkActionModal();
 			await loadData();
 		} catch (error) {
-			bulkActionError = error instanceof Error ? error.message : 'Failed to apply bulk action.';
+			bulkActionError = error instanceof Error ? error.message : 'Không thể áp dụng thao tác hàng loạt.';
 			toastError(bulkActionError);
 		} finally {
 			isApplyingBulkAction = false;
@@ -890,7 +891,7 @@
 		event.preventDefault();
 
 		if (!importFile) {
-			importFormError = 'Please select an Excel file to import.';
+			importFormError = 'Vui lòng chọn file Excel để import.';
 			return;
 		}
 
@@ -908,7 +909,9 @@
 
 			const payload = (await response.json()) as StudentImportResponse | { error?: string };
 			if (!response.ok) {
-				throw new Error('error' in payload ? payload.error || 'Import failed.' : 'Import failed.');
+				throw new Error(
+					'error' in payload ? payload.error || 'Import thất bại.' : 'Import thất bại.'
+				);
 			}
 
 			importSummary = payload as StudentImportResponse;
@@ -920,18 +923,18 @@
 			isImportResultModalOpen = true;
 
 			if (importSummary.importedCount > 0) {
-				toastSuccess(`Imported ${importSummary.importedCount} student(s).`);
+				toastSuccess(`Đã import ${importSummary.importedCount} võ sinh.`);
 			}
 
 			if (importSummary.errors.length > 0) {
-				toastError(`${importSummary.errors.length} row(s) failed during import.`);
+				toastError(`${importSummary.errors.length} dòng bị lỗi khi import.`);
 			}
 
 			if (importSummary.importedCount === 0 && importSummary.errors.length === 0) {
-				toastSuccess('Import completed with no changes.');
+				toastSuccess('Import hoàn tất, không có thay đổi.');
 			}
 		} catch (error) {
-			importFormError = error instanceof Error ? error.message : 'Failed to import students.';
+			importFormError = error instanceof Error ? error.message : 'Không thể import võ sinh.';
 			toastError(importFormError);
 		} finally {
 			isImporting = false;
@@ -962,7 +965,7 @@
 		avatarImportFileNames = acceptedFiles.map((file) => file.name);
 		avatarImportError =
 			acceptedFiles.length === 0 && files.length > 0
-				? 'Only JPG, PNG, or WebP images are supported.'
+				? 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.'
 				: '';
 	}
 
@@ -1001,7 +1004,7 @@
 	async function handleAvatarImportAnalyze(event: SubmitEvent) {
 		event.preventDefault();
 		if (avatarImportFiles.length === 0) {
-			avatarImportError = 'Please select at least one image file.';
+			avatarImportError = 'Vui lòng chọn ít nhất một ảnh.';
 			return;
 		}
 
@@ -1031,11 +1034,11 @@
 				})
 			);
 			if (response.items.length > 0) {
-				toastSuccess(`Prepared ${response.items.length} avatar file(s) for review.`);
+				toastSuccess(`Đã chuẩn bị ${response.items.length} ảnh avatar để rà soát.`);
 			}
 		} catch (error) {
 			avatarImportError =
-				error instanceof Error ? error.message : 'Failed to analyze avatar import.';
+				error instanceof Error ? error.message : 'Không thể phân tích file avatar import.';
 			toastError(avatarImportError);
 		} finally {
 			isAnalyzingAvatarImport = false;
@@ -1053,7 +1056,7 @@
 			.filter((item) => item.studentId);
 
 		if (confirmedItems.length === 0) {
-			avatarImportError = 'Select at least one student before confirming import.';
+			avatarImportError = 'Vui lòng chọn ít nhất một võ sinh trước khi xác nhận import.';
 			return;
 		}
 
@@ -1082,10 +1085,10 @@
 			);
 			await refreshVisibleAvatarPreviews();
 			emitDataChanged('avatar-sync');
-			toastSuccess(`Imported ${response.importedCount} avatar(s).`);
+			toastSuccess(`Đã import ${response.importedCount} avatar.`);
 		} catch (error) {
 			avatarImportError =
-				error instanceof Error ? error.message : 'Failed to confirm avatar import.';
+				error instanceof Error ? error.message : 'Không thể xác nhận import avatar.';
 			toastError(avatarImportError);
 		} finally {
 			isConfirmingAvatarImport = false;
@@ -1176,6 +1179,38 @@
 		avatarImportSelectionQueries = { ...avatarImportSelectionQueries, [itemId]: '' };
 	}
 
+	function getStudentStatusLabel(status: StudentStatus): string {
+		switch (status) {
+			case 'active':
+				return 'Đang học';
+			case 'inactive':
+				return 'Ngưng học';
+			case 'suspended':
+				return 'Tạm dừng';
+			default:
+				return status;
+		}
+	}
+
+	function getAvatarImportStatusLabel(status: string): string {
+		switch (status) {
+			case 'matched':
+				return 'Khớp';
+			case 'ambiguous':
+				return 'Mơ hồ';
+			case 'unmatched':
+				return 'Không khớp';
+			case 'failed':
+				return 'Lỗi';
+			case 'imported':
+				return 'Đã import';
+			case 'skipped':
+				return 'Bỏ qua';
+			default:
+				return status;
+		}
+	}
+
 	function openAvatarPreview(url: string, title: string) {
 		if (!url) return;
 		avatarPreviewUrl = url;
@@ -1202,61 +1237,67 @@
 
 <main class="mx-auto max-w-6xl space-y-8 px-4 py-8">
 	<PageHeader
-		eyebrow="Management"
-		title="Students"
-		description="Manage students, assign clubs, and track current belt ranks."
+		eyebrow="Quản lý"
+		title="Võ sinh"
+		description="Quản lý võ sinh, phân CLB và theo dõi cấp đai hiện tại."
 	/>
 
-	<SectionCard title="Student list">
+	<SectionCard title="Danh sách võ sinh">
 		{#snippet actions()}
 			<IconActionButton
 				icon="icon-[mdi--download-outline]"
-				label="Download template"
+				label="Tải file mẫu"
 				onclick={downloadImportTemplate}
-				tooltipText={{ text: 'Download template', placement: 'bottom' }}
+				tooltipText={{ text: 'Tải file mẫu', placement: 'bottom' }}
 			/>
 			<IconActionButton
 				icon="icon-[mdi--file-import-outline]"
-				label="Import students"
+				label="Import võ sinh"
 				onclick={openImportModal}
-				tooltipText={{ text: 'Import students', placement: 'bottom' }}
+				tooltipText={{ text: 'Import võ sinh', placement: 'bottom' }}
 			/>
 			<IconActionButton
 				icon="icon-[mdi--image-multiple-outline]"
-				label="Import avatars"
+				label="Nhập avatar"
 				onclick={openAvatarImportModal}
-				tooltipText={{ text: 'Import avatars', placement: 'bottom' }}
+				tooltipText={{ text: 'Nhập avatar', placement: 'bottom' }}
 			/>
 			<IconActionButton
 				icon="icon-[mdi--plus]"
-				label="Add student"
+				label="Thêm võ sinh"
 				variant="primary"
 				onclick={openCreateModal}
-				tooltipText={{ text: 'Add student', placement: 'bottom' }}
+				tooltipText={{ text: 'Thêm võ sinh', placement: 'bottom' }}
 			/>
 		{/snippet}
 
 		<DataTableToolbar
 			bind:searchValue={search}
-			searchPlaceholder="Search by student, club, belt rank"
+			searchPlaceholder="Tìm theo võ sinh, CLB, cấp đai"
 		>
 			{#snippet filters()}
 				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedClubId}>
-					<option value="">All clubs</option>
+					<option value="">Tất cả CLB</option>
 					{#each clubs as club (club.id)}
 						<option value={club.id}>{club.name}</option>
 					{/each}
 				</select>
 				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedGroupId}>
-					<option value="">All groups</option>
+					<option value="">Tất cả nhóm</option>
 					{#each clubGroups.filter((group) => !selectedClubId || group.clubId === selectedClubId) as group (group.id)}
 						<option value={group.id}>{group.name}</option>
 					{/each}
 				</select>
 				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedBeltRankId}>
-					<option value="">All belt ranks</option>
+					<option value="">Tất cả cấp đai</option>
 					{#each beltRanks as beltRank (beltRank.id)}
 						<option value={beltRank.id}>{beltRank.name}</option>
+					{/each}
+				</select>
+				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedStatus}>
+					<option value="">Tất cả trạng thái</option>
+					{#each statusOptions as statusOption (statusOption.value)}
+						<option value={statusOption.value}>{statusOption.label}</option>
 					{/each}
 				</select>
 			{/snippet}
@@ -1274,11 +1315,11 @@
 							checked={allFilteredStudentsSelected}
 							onchange={toggleSelectAllFilteredStudents}
 						/>
-						<span>Select all filtered</span>
-					</label>
-					<span class="text-sm text-slate-500">
-						{selectedStudentCount} selected
-					</span>
+							<span>Chọn tất cả theo bộ lọc</span>
+						</label>
+						<span class="text-sm text-slate-500">
+							Đã chọn {selectedStudentCount}
+						</span>
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
 					<button
@@ -1287,7 +1328,7 @@
 						onclick={clearStudentSelection}
 						disabled={selectedStudentCount === 0}
 					>
-						Clear selection
+						Bỏ chọn
 					</button>
 					<button
 						class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
@@ -1295,18 +1336,18 @@
 						onclick={openBulkActionModal}
 						disabled={selectedStudentCount === 0}
 					>
-						Bulk actions
+						Cập nhật hàng loạt
 					</button>
 				</div>
 			</div>
 		{/if}
 
 		{#if isLoading}
-			<p class="text-sm text-slate-500">Loading students...</p>
+			<p class="text-sm text-slate-500">Đang tải võ sinh...</p>
 		{:else if filteredStudents.length === 0}
 			<EmptyState
-				title="No students found"
-				description="Create a student after setting up clubs and belt ranks."
+				title="Chưa có võ sinh"
+				description="Hãy tạo võ sinh sau khi đã thiết lập CLB và cấp đai."
 			/>
 		{:else}
 			<div class="space-y-3 md:hidden">
@@ -1343,7 +1384,7 @@
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
 										<span class="icon-[mdi--card-account-details-outline] h-4 w-4 shrink-0"></span>
-										<span class="truncate">{student.studentCode ?? 'Generated on sync'}</span>
+										<span class="truncate">{student.studentCode ?? 'Tạo khi đồng bộ'}</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
@@ -1363,14 +1404,14 @@
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--sync-alert] h-4 w-4 shrink-0"></span>
 										<span class="truncate">
-											{student.syncStatus === 'failed' ? 'Delete failed' : 'Pending delete'}
+											{student.syncStatus === 'failed' ? 'Xóa thất bại' : 'Chờ xóa'}
 										</span>
 									</p>
 								</div>
 								<div class="flex justify-end gap-2 pt-1">
 									<IconActionButton
 										icon="icon-[mdi--restore]"
-										label={`Restore ${student.fullName}`}
+										label={`Khôi phục ${student.fullName}`}
 										onclick={(event) => {
 											event.stopPropagation();
 											void handleRestore(student.id);
@@ -1422,7 +1463,7 @@
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
 										<span class="icon-[mdi--card-account-details-outline] h-4 w-4 shrink-0"></span>
-										<span class="truncate">{student.studentCode ?? 'Generated on sync'}</span>
+										<span class="truncate">{student.studentCode ?? 'Tạo khi đồng bộ'}</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
@@ -1441,13 +1482,13 @@
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
 										<span class="icon-[mdi--account-check-outline] h-4 w-4 shrink-0"></span>
-										<span class="truncate">{student.status}</span>
+										<span class="truncate">{getStudentStatusLabel(student.status)}</span>
 									</p>
 								</div>
 								<div class="flex justify-end gap-2 pt-1">
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
-										label={`Edit ${student.fullName}`}
+										label={`Sửa ${student.fullName}`}
 										onclick={(event) => {
 											event.stopPropagation();
 											startEdit(student);
@@ -1455,7 +1496,7 @@
 									/>
 									<IconActionButton
 										icon="icon-[mdi--delete-outline]"
-										label={`Delete ${student.fullName}`}
+										label={`Xóa ${student.fullName}`}
 										variant="danger"
 										onclick={(event) => {
 											event.stopPropagation();
@@ -1481,14 +1522,14 @@
 									onchange={toggleSelectAllFilteredStudents}
 								/>
 							</th>
-							<th class="py-2 pr-3">Student</th>
-							<th class="py-2 pr-3">Code</th>
-							<th class="py-2 pr-3">Club</th>
-							<th class="py-2 pr-3">Group</th>
-							<th class="py-2 pr-3">Belt Rank</th>
-							<th class="py-2 pr-3">Schedule</th>
-							<th class="py-2 pr-3">Status</th>
-							<th class="py-2 pr-0 text-right">Actions</th>
+							<th class="py-2 pr-3">Võ sinh</th>
+							<th class="py-2 pr-3">Mã số</th>
+							<th class="py-2 pr-3">CLB</th>
+							<th class="py-2 pr-3">Nhóm</th>
+							<th class="py-2 pr-3">Cấp đai</th>
+							<th class="py-2 pr-3">Lịch học</th>
+							<th class="py-2 pr-3">Trạng thái</th>
+							<th class="py-2 pr-0 text-right">Thao tác</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1529,7 +1570,7 @@
 									</div>
 								</td>
 								<td class="py-3 pr-3 text-slate-700"
-									>{student.studentCode ?? 'Generated on sync'}</td
+									>{student.studentCode ?? 'Tạo khi đồng bộ'}</td
 								>
 								<td class="py-3 pr-3 text-slate-700">{clubMap.get(student.clubId) ?? '-'}</td>
 								<td class="py-3 pr-3 text-slate-700"
@@ -1543,9 +1584,9 @@
 								>
 								<td class="py-3 pr-3 text-slate-700">
 									{#if student.deletedAt}
-										{student.syncStatus === 'failed' ? 'Delete failed' : 'Pending delete'}
+										{student.syncStatus === 'failed' ? 'Xóa thất bại' : 'Chờ xóa'}
 									{:else}
-										{student.status}
+										{getStudentStatusLabel(student.status)}
 									{/if}
 								</td>
 								<td class="py-3 pr-0 pl-3 text-right">
@@ -1553,7 +1594,7 @@
 										{#if student.deletedAt}
 											<IconActionButton
 												icon="icon-[mdi--restore]"
-												label={`Restore ${student.fullName}`}
+												label={`Khôi phục ${student.fullName}`}
 												onclick={(event) => {
 													event.stopPropagation();
 													void handleRestore(student.id);
@@ -1562,7 +1603,7 @@
 										{:else}
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
-												label={`Edit ${student.fullName}`}
+												label={`Sửa ${student.fullName}`}
 												onclick={(event) => {
 													event.stopPropagation();
 													startEdit(student);
@@ -1570,7 +1611,7 @@
 											/>
 											<IconActionButton
 												icon="icon-[mdi--delete-outline]"
-												label={`Delete ${student.fullName}`}
+												label={`Xóa ${student.fullName}`}
 												variant="danger"
 												onclick={(event) => {
 													event.stopPropagation();
@@ -1591,14 +1632,14 @@
 	</SectionCard>
 </main>
 
-<AppModal open={isImportModalOpen} title="Import students" onClose={closeImportModal}>
+<AppModal open={isImportModalOpen} title="Import võ sinh" onClose={closeImportModal}>
 	<form class="space-y-4" onsubmit={handleImportSubmit}>
 		<div class="space-y-2">
 			<p class="text-sm text-slate-600">
-				Upload an Excel file with columns:
+				Tải lên file Excel với các cột:
 				<span class="font-medium text-slate-900">fullName</span>,
 				<span class="font-medium text-slate-900">club</span>,
-				<span class="font-medium text-slate-900">beltRank</span>, and optional:
+				<span class="font-medium text-slate-900">beltRank</span>, và tùy chọn:
 				<span class="font-medium text-slate-900">studentCode</span>,
 				<span class="font-medium text-slate-900">group</span>,
 				<span class="font-medium text-slate-900">scheduleMode</span>,
@@ -1613,10 +1654,10 @@
 				<span class="font-medium text-slate-900">notes</span>.
 			</p>
 			<p class="text-xs text-slate-500">
-				Date fields must use <code>YYYY-MM-DD</code>. Leave <code>scheduleMode</code> empty to
-				inherit the club schedule. Use comma-separated weekdays like <code>mon,wed,fri</code> for
-				<code>scheduleDays</code>. If <code>studentCode</code> is blank, backend sync will generate it
-				later.
+				Các trường ngày dùng định dạng <code>YYYY-MM-DD</code>. Để trống
+				<code>scheduleMode</code> để kế thừa lịch CLB. Dùng danh sách ngày cách nhau bằng dấu phẩy như
+				<code>mon,wed,fri</code> cho <code>scheduleDays</code>. Nếu <code>studentCode</code> để trống,
+				backend sẽ tự tạo khi đồng bộ.
 			</p>
 		</div>
 
@@ -1625,7 +1666,7 @@
 		>
 			<span class="icon-[mdi--file-excel-outline] h-8 w-8 text-slate-500"></span>
 			<span class="text-sm font-medium text-slate-700"
-				>{importFileName || 'Choose an Excel file (.xlsx, .xls)'}</span
+				>{importFileName || 'Chọn file Excel (.xlsx, .xls)'}</span
 			>
 			<input class="hidden" type="file" accept=".xlsx,.xls" onchange={handleImportFileChange} />
 		</label>
@@ -1640,30 +1681,30 @@
 				type="button"
 				onclick={closeImportModal}
 			>
-				Cancel
+				Hủy
 			</button>
 			<button
 				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
 				type="submit"
 				disabled={isImporting}
 			>
-				{isImporting ? 'Importing...' : 'Import'}
+				{isImporting ? 'Đang import...' : 'Import'}
 			</button>
 		</div>
 	</form>
 </AppModal>
 
-<AppModal open={isImportResultModalOpen} title="Import result" onClose={closeImportResultModal}>
+<AppModal open={isImportResultModalOpen} title="Kết quả import" onClose={closeImportResultModal}>
 	<div class="space-y-4">
 		<div class="grid gap-3 sm:grid-cols-2">
 			<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-				<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Imported</p>
+				<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Đã import</p>
 				<p class="mt-2 text-2xl font-semibold text-slate-900">
 					{importSummary?.importedCount ?? 0}
 				</p>
 			</div>
 			<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-				<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Errors</p>
+				<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Lỗi</p>
 				<p class="mt-2 text-2xl font-semibold text-slate-900">
 					{importSummary?.errors.length ?? 0}
 				</p>
@@ -1674,13 +1715,13 @@
 			<p
 				class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
 			>
-				All rows were imported successfully.
+				Tất cả dòng đã được import thành công.
 			</p>
 		{:else}
 			<div class="max-h-80 space-y-3 overflow-y-auto pr-1">
 				{#each importErrors as importError (`${importError.row}-${importError.message}`)}
 					<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-						<p class="text-sm font-medium text-red-700">Row {importError.row}</p>
+						<p class="text-sm font-medium text-red-700">Dòng {importError.row}</p>
 						<p class="mt-1 text-sm text-red-600">{importError.message}</p>
 					</div>
 				{/each}
@@ -1693,7 +1734,7 @@
 				type="button"
 				onclick={closeImportResultModal}
 			>
-				Close
+				Đóng
 			</button>
 		</div>
 	</div>
@@ -1701,7 +1742,7 @@
 
 <AppModal
 	open={isAvatarImportModalOpen}
-	title="Import avatars"
+	title="Nhập avatar"
 	onClose={closeAvatarImportModal}
 	size="xl"
 >
@@ -1709,22 +1750,21 @@
 		<form class="space-y-4" onsubmit={handleAvatarImportAnalyze}>
 			<div class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
 				<p class="text-sm text-slate-700">
-					Upload multiple avatar images. Backend will auto-match by
-					<code>studentCode</code> first, then by normalized full name. You can review and adjust before
-					confirming.
+					Tải lên nhiều ảnh avatar. Backend sẽ tự khớp theo <code>studentCode</code> trước, sau đó theo
+					họ tên đã chuẩn hóa. Bạn có thể rà soát và chỉnh lại trước khi xác nhận.
 				</p>
 				<div class="flex flex-wrap gap-2 pt-1">
 					<label
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={avatarImportMatchMode} value="auto" />
-						<span>Auto match</span>
+						<span>Tự khớp</span>
 					</label>
 					<label
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={avatarImportMatchMode} value="manual" />
-						<span>Manual match</span>
+						<span>Khớp thủ công</span>
 					</label>
 				</div>
 			</div>
@@ -1743,10 +1783,10 @@
 				<span class="icon-[mdi--image-multiple-outline] h-8 w-8 text-slate-500"></span>
 				<span class="text-sm font-medium text-slate-700">
 					{avatarImportFileNames.length > 0
-						? `${avatarImportFileNames.length} file(s) selected`
+						? `Đã chọn ${avatarImportFileNames.length} file`
 						: isAvatarImportDragActive
-							? 'Drop image files here'
-							: 'Choose image files or drag and drop'}
+							? 'Thả ảnh vào đây'
+							: 'Chọn ảnh hoặc kéo thả vào đây'}
 				</span>
 				{#if avatarImportFileNames.length > 0}
 					<span class="max-w-full truncate text-xs text-slate-500"
@@ -1772,14 +1812,14 @@
 					type="button"
 					onclick={closeAvatarImportModal}
 				>
-					Cancel
+					Hủy
 				</button>
 				<button
 					class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
 					type="submit"
 					disabled={isAnalyzingAvatarImport}
 				>
-					{isAnalyzingAvatarImport ? 'Analyzing...' : 'Analyze files'}
+					{isAnalyzingAvatarImport ? 'Đang phân tích...' : 'Phân tích file'}
 				</button>
 			</div>
 		</form>
@@ -1787,23 +1827,23 @@
 		<div class="space-y-4">
 			<div class="grid gap-3 sm:grid-cols-4">
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Total</p>
+					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Tổng</p>
 					<p class="mt-2 text-2xl font-semibold text-slate-900">{avatarImportBatch.totalItems}</p>
 				</div>
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Matched</p>
+					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Khớp</p>
 					<p class="mt-2 text-2xl font-semibold text-emerald-700">
 						{avatarImportBatch.matchedItems}
 					</p>
 				</div>
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Ambiguous</p>
+					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Mơ hồ</p>
 					<p class="mt-2 text-2xl font-semibold text-amber-700">
 						{avatarImportBatch.ambiguousItems}
 					</p>
 				</div>
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Unmatched</p>
+					<p class="text-xs tracking-[0.2em] text-slate-500 uppercase">Không khớp</p>
 					<p class="mt-2 text-2xl font-semibold text-slate-700">
 						{avatarImportBatch.unmatchedItems}
 					</p>
@@ -1814,19 +1854,19 @@
 				class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
 			>
 				<div class="space-y-2">
-					<p class="text-sm font-medium text-slate-700">Existing avatar strategy</p>
+						<p class="text-sm font-medium text-slate-700">Xử lý avatar đã có</p>
 					<div class="flex flex-wrap gap-2">
 						<label
 							class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 						>
 							<input type="radio" bind:group={avatarImportReplaceStrategy} value="replace" />
-							<span>Replace existing avatars</span>
+								<span>Thay avatar hiện có</span>
 						</label>
 						<label
 							class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 						>
 							<input type="radio" bind:group={avatarImportReplaceStrategy} value="keep" />
-							<span>Keep existing and skip</span>
+								<span>Giữ avatar cũ và bỏ qua</span>
 						</label>
 					</div>
 				</div>
@@ -1837,14 +1877,14 @@
 						onclick={selectAllMatchedAvatarImports}
 						disabled={avatarImportMatchMode === 'manual'}
 					>
-						Select all matched
+							Chọn tất cả bản ghi khớp
 					</button>
 					<button
 						type="button"
 						class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
 						onclick={clearAllAvatarImportSelections}
 					>
-						Clear all
+							Xóa chọn tất cả
 					</button>
 				</div>
 			</div>
@@ -1853,11 +1893,11 @@
 				<input
 					type="search"
 					class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-					placeholder="Search by file or student"
+					placeholder="Tìm theo tên file hoặc võ sinh"
 					bind:value={avatarImportSearch}
 				/>
 				<div class="flex flex-wrap gap-2">
-					{#each [{ value: 'all', label: 'All', count: avatarImportItems.length }, { value: 'matched', label: 'Matched', count: getAvatarImportStatusCount('matched') }, { value: 'ambiguous', label: 'Ambiguous', count: getAvatarImportStatusCount('ambiguous') }, { value: 'unmatched', label: 'Unmatched', count: getAvatarImportStatusCount('unmatched') }, { value: 'failed', label: 'Failed', count: getAvatarImportStatusCount('failed') }, { value: 'skipped', label: 'Skipped', count: getAvatarImportStatusCount('skipped') }, { value: 'imported', label: 'Imported', count: getAvatarImportStatusCount('imported') }] as filterOption (filterOption.value)}
+						{#each [{ value: 'all', label: 'Tất cả', count: avatarImportItems.length }, { value: 'matched', label: 'Khớp', count: getAvatarImportStatusCount('matched') }, { value: 'ambiguous', label: 'Mơ hồ', count: getAvatarImportStatusCount('ambiguous') }, { value: 'unmatched', label: 'Không khớp', count: getAvatarImportStatusCount('unmatched') }, { value: 'failed', label: 'Lỗi', count: getAvatarImportStatusCount('failed') }, { value: 'skipped', label: 'Bỏ qua', count: getAvatarImportStatusCount('skipped') }, { value: 'imported', label: 'Đã import', count: getAvatarImportStatusCount('imported') }] as filterOption (filterOption.value)}
 						<button
 							type="button"
 							class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
@@ -1883,7 +1923,7 @@
 					<p
 						class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500"
 					>
-						No files match the current filter.
+							Không có file phù hợp với bộ lọc hiện tại.
 					</p>
 				{/if}
 				{#each filteredAvatarImportItems as item (item.id)}
@@ -1912,7 +1952,7 @@
 									<span
 										class={`rounded-full border px-2.5 py-1 text-xs font-medium ${getAvatarImportStatusClass(item.status)}`}
 									>
-										{item.status}
+										{getAvatarImportStatusLabel(item.status)}
 									</span>
 									{#if item.matchMethod}
 										<span
@@ -1926,10 +1966,10 @@
 									<p class="text-sm text-red-600">{item.errorMessage}</p>
 								{/if}
 								<p class="text-sm text-slate-600">
-									Auto match:
+										Tự khớp:
 									<span class="font-medium text-slate-800"
-										>{item.guessedStudentName ?? 'No match'}</span
-									>
+											>{item.guessedStudentName ?? 'Không khớp'}</span
+										>
 								</p>
 								<div class="relative space-y-2">
 									<div class="flex gap-2">
@@ -1937,10 +1977,10 @@
 											<SuggestionInput
 												value={avatarImportSelectionQueries[item.id] ?? ''}
 												options={avatarImportStudentOptions}
-												placeholder="Search student by code or name"
+													placeholder="Tìm võ sinh theo mã hoặc tên"
 												disabled={item.status === 'failed' || item.status === 'imported'}
 												maxSuggestions={5}
-												emptyText="No student found."
+													emptyText="Không tìm thấy võ sinh."
 												onInputChange={(nextValue) =>
 													handleAvatarSelectionInput(item.id, nextValue)}
 												onSelect={(option) => {
@@ -1959,7 +1999,7 @@
 											disabled={item.status === 'failed' || item.status === 'imported'}
 											onclick={() => clearAvatarImportStudentSelection(item.id)}
 										>
-											Skip
+												Bỏ qua
 										</button>
 									</div>
 								</div>
@@ -1975,7 +2015,7 @@
 					type="button"
 					onclick={closeAvatarImportModal}
 				>
-					Close
+					Đóng
 				</button>
 				<button
 					class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -1984,8 +2024,8 @@
 					disabled={isConfirmingAvatarImport || selectedAvatarImportCount === 0}
 				>
 					{isConfirmingAvatarImport
-						? 'Confirming...'
-						: `Confirm import (${selectedAvatarImportCount})`}
+							? 'Đang xác nhận...'
+							: `Xác nhận import (${selectedAvatarImportCount})`}
 				</button>
 			</div>
 		</div>
@@ -1995,35 +2035,35 @@
 <ImagePreviewModal
 	open={isAvatarPreviewModalOpen}
 	src={avatarPreviewUrl}
-	title={avatarPreviewTitle || 'Avatar preview'}
+	title={avatarPreviewTitle || 'Xem trước avatar'}
 	onClose={closeAvatarPreview}
 />
 
-<AppModal open={isBulkActionModalOpen} title="Bulk update students" onClose={closeBulkActionModal}>
+<AppModal open={isBulkActionModalOpen} title="Cập nhật võ sinh hàng loạt" onClose={closeBulkActionModal}>
 	<div class="space-y-5 p-1">
 		<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-			Applying changes to <span class="font-semibold text-slate-900">{selectedStudentCount}</span> selected
-			student(s).
+			Áp dụng thay đổi cho <span class="font-semibold text-slate-900">{selectedStudentCount}</span> võ sinh
+			đã chọn.
 		</div>
 
 		<div class="mb-2 space-y-1">
-			<span class="text-sm font-medium text-slate-700">Action</span>
-			<select class="w-full rounded-lg border border-slate-300" bind:value={bulkActionType}>
-				<option value="delete">Delete selected students</option>
-				<option value="beltRank">Update belt rank</option>
-				<option value="schedule">Update schedule</option>
-				<option value="status">Update status</option>
-				<option value="group">Update group</option>
-				<option value="club">Update club</option>
-			</select>
-		</div>
+				<span class="text-sm font-medium text-slate-700">Thao tác</span>
+				<select class="w-full rounded-lg border border-slate-300" bind:value={bulkActionType}>
+					<option value="delete">Xóa võ sinh đã chọn</option>
+					<option value="beltRank">Cập nhật cấp đai</option>
+					<option value="schedule">Cập nhật lịch học</option>
+					<option value="status">Cập nhật trạng thái</option>
+					<option value="group">Cập nhật nhóm</option>
+					<option value="club">Cập nhật CLB</option>
+				</select>
+			</div>
 
 		{#if bulkActionType === 'beltRank'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-					<span class="text-sm font-medium text-slate-700">Belt rank</span>
-					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkBeltRankId}>
-						<option value="">Select belt rank</option>
+						<span class="text-sm font-medium text-slate-700">Cấp đai</span>
+						<select class="w-full rounded-lg border border-slate-300" bind:value={bulkBeltRankId}>
+							<option value="">Chọn cấp đai</option>
 						{#each assignableBeltRanks as beltRank (beltRank.id)}
 							<option value={beltRank.id}>{beltRank.name}</option>
 						{/each}
@@ -2035,7 +2075,7 @@
 		{#if bulkActionType === 'status'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-					<span class="text-sm font-medium text-slate-700">Status</span>
+						<span class="text-sm font-medium text-slate-700">Trạng thái</span>
 					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkStatus}>
 						{#each statusOptions as option (option.value)}
 							<option value={option.value}>{option.label}</option>
@@ -2049,20 +2089,20 @@
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<p class="text-sm text-slate-600">
 					{#if singleSelectedClubId}
-						Update group for students in
-						<span class="font-medium text-slate-900"
-							>{clubMap.get(singleSelectedClubId) ?? 'selected club'}</span
-						>.
-					{:else}
-						All selected students must belong to the same club to change group.
-					{/if}
-				</p>
+							Cập nhật nhóm cho võ sinh thuộc
+							<span class="font-medium text-slate-900"
+								>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
+							>.
+						{:else}
+							Tất cả võ sinh được chọn phải thuộc cùng một CLB để đổi nhóm.
+						{/if}
+					</p>
 				<select
 					class="w-full rounded-lg border border-slate-300"
 					bind:value={bulkGroupId}
 					disabled={!singleSelectedClubId}
 				>
-					<option value="">No group</option>
+						<option value="">Không có nhóm</option>
 					{#each bulkGroupOptions as group (group.id)}
 						<option value={group.id}>{group.name}</option>
 					{/each}
@@ -2073,16 +2113,16 @@
 		{#if bulkActionType === 'club'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-					<span class="text-sm font-medium text-slate-700">Club</span>
-					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkClubId}>
-						<option value="">Select club</option>
+						<span class="text-sm font-medium text-slate-700">CLB</span>
+						<select class="w-full rounded-lg border border-slate-300" bind:value={bulkClubId}>
+							<option value="">Chọn CLB</option>
 						{#each assignableClubs as club (club.id)}
 							<option value={club.id}>{club.name}</option>
 						{/each}
 					</select>
 				</label>
 				<p class="text-xs text-slate-500">
-					Changing club will clear group and reset schedule to inherit from the new club.
+						Đổi CLB sẽ xóa nhóm hiện tại và đặt lại lịch học theo lịch CLB mới.
 				</p>
 			</div>
 		{/if}
@@ -2094,29 +2134,29 @@
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={bulkScheduleMode} value="inherit" />
-						<span>Inherit club schedule</span>
+							<span>Kế thừa lịch CLB</span>
 					</label>
 					<label
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={bulkScheduleMode} value="custom" />
-						<span>Custom schedule</span>
+							<span>Lịch tùy chỉnh</span>
 					</label>
 				</div>
 
 				{#if bulkScheduleMode === 'custom'}
 					<p class="text-sm text-slate-600">
 						{#if singleSelectedClubId}
-							Choose training days within
-							<span class="font-medium text-slate-900"
-								>{clubMap.get(singleSelectedClubId) ?? 'selected club'}</span
-							>.
-						{:else}
-							All selected students must belong to the same club to apply a custom schedule.
-						{/if}
-					</p>
+								Chọn ngày tập trong
+								<span class="font-medium text-slate-900"
+									>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
+								>.
+							{:else}
+								Tất cả võ sinh được chọn phải thuộc cùng một CLB để áp dụng lịch tùy chỉnh.
+							{/if}
+						</p>
 					<div class="flex flex-wrap gap-2">
-						{#each [{ value: 'mon', label: 'Mon' }, { value: 'tue', label: 'Tue' }, { value: 'wed', label: 'Wed' }, { value: 'thu', label: 'Thu' }, { value: 'fri', label: 'Fri' }, { value: 'sat', label: 'Sat' }, { value: 'sun', label: 'Sun' }] as weekdayOption (weekdayOption.value)}
+							{#each [{ value: 'mon', label: 'T2' }, { value: 'tue', label: 'T3' }, { value: 'wed', label: 'T4' }, { value: 'thu', label: 'T5' }, { value: 'fri', label: 'T6' }, { value: 'sat', label: 'T7' }, { value: 'sun', label: 'CN' }] as weekdayOption (weekdayOption.value)}
 							<button
 								type="button"
 								class={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
@@ -2137,7 +2177,7 @@
 
 		{#if bulkActionType === 'delete'}
 			<p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-				This will soft delete all selected students.
+					Thao tác này sẽ xóa mềm toàn bộ võ sinh đã chọn.
 			</p>
 		{/if}
 
@@ -2151,7 +2191,7 @@
 				type="button"
 				onclick={closeBulkActionModal}
 			>
-				Cancel
+					Hủy
 			</button>
 			<button
 				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -2159,7 +2199,7 @@
 				onclick={() => void handleBulkActionApply()}
 				disabled={isApplyingBulkAction}
 			>
-				{isApplyingBulkAction ? 'Applying...' : 'Apply'}
+					{isApplyingBulkAction ? 'Đang áp dụng...' : 'Áp dụng'}
 			</button>
 		</div>
 	</div>
@@ -2167,7 +2207,7 @@
 
 <StudentFormModal
 	open={isModalOpen}
-	title={editingId ? 'Edit student' : 'Create student'}
+	title={editingId ? 'Cập nhật võ sinh' : 'Tạo võ sinh'}
 	studentId={editingId}
 	bind:form
 	{errors}
@@ -2178,11 +2218,11 @@
 	{availableClubTrainingDays}
 	onClose={closeModal}
 	onSubmit={() => void handleSubmit()}
-	submitLabel={editingId ? 'Update student' : 'Create student'}
+	submitLabel={editingId ? 'Cập nhật võ sinh' : 'Tạo võ sinh'}
 	{isSubmitting}
 	showScheduleSection={true}
 	showClubSelector={true}
 	showStatusField={!!editingId}
-	studentCodeDisplay={editingId ? form.studentCode || 'Generated on sync' : 'Generated on sync'}
+	studentCodeDisplay={editingId ? form.studentCode || 'Tạo khi đồng bộ' : 'Tạo khi đồng bộ'}
 	statusOptions={[...statusOptions]}
 />
