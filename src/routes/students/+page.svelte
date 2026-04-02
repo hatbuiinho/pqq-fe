@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { replaceState } from '$app/navigation';
 	import {
 		AppDatePicker,
 		DataTableToolbar,
@@ -475,7 +476,7 @@
 		url.searchParams.delete('studentCode');
 		url.searchParams.delete('studentId');
 		url.searchParams.delete('open');
-		window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+		replaceState(`${url.pathname}${url.search}${url.hash}`, {});
 	}
 
 	function applyDeepLinkOpen() {
@@ -625,6 +626,12 @@
 	function closeAvatarImportModal() {
 		isAvatarImportModalOpen = false;
 		resetAvatarImportState();
+	}
+
+	function getStudentDetailHref(student: Student): string {
+		const code = (student.studentCode ?? '').trim();
+		if (!code) return '';
+		return `/students/${encodeURIComponent(code)}`;
 	}
 
 	function startEdit(student: Student) {
@@ -1321,7 +1328,17 @@
 										disabled={true}
 									/>
 									<StudentAvatarThumb name={student.fullName} src={avatarUrls[student.id]} />
-									<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+									{#if getStudentDetailHref(student)}
+										<a
+											class="min-w-0 truncate font-semibold text-slate-900 hover:text-slate-700 hover:underline"
+											href={getStudentDetailHref(student)}
+											onclick={(event) => event.stopPropagation()}
+										>
+											{student.fullName}
+										</a>
+									{:else}
+										<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+									{/if}
 								</div>
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
@@ -1390,7 +1407,17 @@
 										onchange={() => toggleStudentSelection(student.id)}
 									/>
 									<StudentAvatarThumb name={student.fullName} src={avatarUrls[student.id]} />
-									<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+									{#if getStudentDetailHref(student)}
+										<a
+											class="min-w-0 truncate font-semibold text-slate-900 hover:text-slate-700 hover:underline"
+											href={getStudentDetailHref(student)}
+											onclick={(event) => event.stopPropagation()}
+										>
+											{student.fullName}
+										</a>
+									{:else}
+										<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+									{/if}
 								</div>
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
@@ -1488,7 +1515,17 @@
 											sizeClass="size-9"
 											textClass="text-xs"
 										/>
-										<span class="font-medium text-slate-900">{student.fullName}</span>
+										{#if getStudentDetailHref(student)}
+											<a
+												class="font-medium text-slate-900 hover:text-slate-700 hover:underline"
+												href={getStudentDetailHref(student)}
+												onclick={(event) => event.stopPropagation()}
+											>
+												{student.fullName}
+											</a>
+										{:else}
+											<span class="font-medium text-slate-900">{student.fullName}</span>
+										{/if}
 									</div>
 								</td>
 								<td class="py-3 pr-3 text-slate-700"

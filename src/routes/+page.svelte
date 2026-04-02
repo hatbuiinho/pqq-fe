@@ -801,13 +801,13 @@
 					<a
 						href={
 							selectedStudentInsight.student.studentCode
-								? `/students?studentCode=${encodeURIComponent(selectedStudentInsight.student.studentCode)}&open=1`
+								? `/students/${encodeURIComponent(selectedStudentInsight.student.studentCode)}`
 								: `/students?studentId=${encodeURIComponent(selectedStudentInsight.student.id)}&open=1`
 						}
 						class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
 					>
 						<span class="icon-[mdi--open-in-new] size-4"></span>
-						<span>Mở chi tiết võ sinh</span>
+						<span>Mở trang hồ sơ</span>
 					</a>
 				</div>
 				<div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
