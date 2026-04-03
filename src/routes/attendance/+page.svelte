@@ -356,8 +356,12 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 	const sessionAttendanceSummary = $derived.by(() => {
 		const totalCount = items.length;
 		const attendedCount = items.filter((item) => isAttendedStatus(item.record.attendanceStatus)).length;
+		const excusedCount = items.filter((item) => item.record.attendanceStatus === 'excused').length;
+		const absentCount = items.filter((item) => item.record.attendanceStatus === 'absent').length;
 		return {
 			attendedCount,
+			excusedCount,
+			absentCount,
 			totalCount,
 			ratio: totalCount > 0 ? (attendedCount / totalCount) * 100 : 0
 		};
@@ -670,6 +674,8 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 		lines.push(
 			`Tong di hoc: ${sessionAttendanceSummary.attendedCount}/${sessionAttendanceSummary.totalCount} (${sessionAttendanceSummary.ratio.toFixed(1)}%)`
 		);
+		lines.push(`Tong vang co phep: ${sessionAttendanceSummary.excusedCount}`);
+		lines.push(`Tong nghi: ${sessionAttendanceSummary.absentCount}`);
 		lines.push('');
 		lines.push('Theo cap dai:');
 
@@ -1754,10 +1760,10 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 	size="md"
 	onClose={closeSessionSummaryModal}
 >
-	<div class="space-y-4">
-		<div class="flex justify-end">
-			<button
-				type="button"
+		<div class="space-y-4">
+			<div class="flex justify-end">
+				<button
+					type="button"
 				class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
 				onclick={handleCopySessionSummary}
 			>
@@ -1765,24 +1771,56 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 				<span>Copy summary</span>
 			</button>
 		</div>
-		<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-			<div class="flex items-center justify-between gap-3">
-				<div class="flex items-center gap-2">
-					<span
-						class="inline-flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
-					>
-						<span class="icon-[mdi--school-outline] size-5"></span>
-					</span>
-					<p class="text-sm font-semibold text-emerald-800">Tổng số đi học</p>
+			<div class="grid gap-3 sm:grid-cols-3">
+				<div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+					<div class="flex items-center justify-between gap-3">
+						<div class="flex items-center gap-2">
+							<span
+								class="inline-flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+							>
+								<span class="icon-[mdi--school-outline] size-5"></span>
+							</span>
+							<p class="text-sm font-semibold text-emerald-800">Tổng số đi học</p>
+						</div>
+						<p class="text-xl font-bold text-emerald-800">
+							{sessionAttendanceSummary.attendedCount}/{sessionAttendanceSummary.totalCount}
+						</p>
+					</div>
+					<p class="mt-2 text-sm text-emerald-700">
+						Tỷ lệ chuyên cần: {sessionAttendanceSummary.ratio.toFixed(1)}%
+					</p>
 				</div>
-				<p class="text-xl font-bold text-emerald-800">
-					{sessionAttendanceSummary.attendedCount}/{sessionAttendanceSummary.totalCount}
-				</p>
+				<div class="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+					<div class="flex items-center justify-between gap-3">
+						<div class="flex items-center gap-2">
+							<span
+								class="inline-flex size-9 items-center justify-center rounded-full bg-sky-100 text-sky-700"
+							>
+								<span class="icon-[mdi--email-outline] size-5"></span>
+							</span>
+							<p class="text-sm font-semibold text-sky-800">Tổng vắng có phép</p>
+						</div>
+						<p class="text-xl font-bold text-sky-800">
+							{sessionAttendanceSummary.excusedCount}
+						</p>
+					</div>
+				</div>
+				<div class="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+					<div class="flex items-center justify-between gap-3">
+						<div class="flex items-center gap-2">
+							<span
+								class="inline-flex size-9 items-center justify-center rounded-full bg-rose-100 text-rose-700"
+							>
+								<span class="icon-[mdi--account-off-outline] size-5"></span>
+							</span>
+							<p class="text-sm font-semibold text-rose-800">Tổng nghỉ</p>
+						</div>
+						<p class="text-xl font-bold text-rose-800">
+							{sessionAttendanceSummary.absentCount}
+						</p>
+					</div>
+				</div>
 			</div>
-			<p class="mt-2 text-sm text-emerald-700">
-				Tỷ lệ chuyên cần: {sessionAttendanceSummary.ratio.toFixed(1)}%
-			</p>
-		</div>
 
 		<div class="space-y-2">
 			<p class="text-sm font-semibold text-slate-700">Theo cấp đai</p>
