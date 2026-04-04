@@ -15,6 +15,7 @@
 		resetSyncStatus,
 		refreshAuthSession,
 		setActiveClubId,
+		userManagementApi,
 		type AuthSession,
 		syncManager,
 		syncStatus,
@@ -31,6 +32,7 @@
 	} from '$lib';
 	import './layout.css';
 	import ToastViewport from '$lib/ui/components/ToastViewport.svelte';
+	import { toastError, toastSuccess } from '$lib/app/toast';
 
 	let sidebarOpen = $state(false);
 	let syncIssuesOpen = $state(false);
@@ -68,6 +70,13 @@
 	let profilePopoverElement = $state<HTMLElement | null>(null);
 	let hydratedSessionToken = $state<string | null>(null);
 	let isHydratingSessionData = $state(false);
+	let isOwnerInviteModalOpen = $state(false);
+	let isCreatingOwnerInvite = $state(false);
+	let isOwnerInviteResultModalOpen = $state(false);
+	let ownerInviteEmail = $state('');
+	let ownerInviteExpiresInDays = $state(7);
+	let ownerInviteFormError = $state('');
+	let ownerInviteShareUrl = $state('');
 
 	const navItems: Array<{
 		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users';
@@ -136,6 +145,7 @@
 			(membership) => membership.clubId === currentAuthSession?.activeClubId
 		) ?? currentAuthSession?.memberships[0]
 	);
+	const canShareOwnerInvite = $derived(activeClubMembership?.clubRole === 'owner');
 
 	function toggleSidebar() {
 		sidebarOpen = !sidebarOpen;
@@ -151,6 +161,30 @@
 
 	function closeProfilePopover() {
 		profilePopoverOpen = false;
+	}
+
+	function openOwnerInviteModal() {
+		if (!canShareOwnerInvite || !activeClubMembership) {
+			toastError('Bạn không có quyền tạo link mời cho CLB.');
+			return;
+		}
+		ownerInviteEmail = '';
+		ownerInviteExpiresInDays = 7;
+		ownerInviteFormError = '';
+		isOwnerInviteModalOpen = true;
+		closeProfilePopover();
+	}
+
+	function closeOwnerInviteModal() {
+		isOwnerInviteModalOpen = false;
+		ownerInviteEmail = '';
+		ownerInviteExpiresInDays = 7;
+		ownerInviteFormError = '';
+	}
+
+	function closeOwnerInviteResultModal() {
+		isOwnerInviteResultModalOpen = false;
+		ownerInviteShareUrl = '';
 	}
 
 	function getUserInitials(fullName: string | undefined): string {
@@ -203,6 +237,69 @@
 		if (Number.isNaN(date.getTime())) return 'Chưa từng đồng bộ';
 
 		return date.toLocaleString();
+	}
+
+	async function copyText(value: string, successMessage: string) {
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(value);
+			} else {
+				const textarea = document.createElement('textarea');
+				textarea.value = value;
+				textarea.setAttribute('readonly', 'true');
+				textarea.style.position = 'absolute';
+				textarea.style.left = '-9999px';
+				document.body.appendChild(textarea);
+				textarea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textarea);
+			}
+			toastSuccess(successMessage);
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể copy nội dung.');
+		}
+	}
+
+	async function handleOwnerInviteSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		if (!activeClubMembership) return;
+
+		const normalizedEmail = ownerInviteEmail.trim();
+		if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+			ownerInviteFormError = 'Email không hợp lệ.';
+			return;
+		}
+		if (
+			!Number.isInteger(ownerInviteExpiresInDays) ||
+			ownerInviteExpiresInDays < 1 ||
+			ownerInviteExpiresInDays > 30
+		) {
+			ownerInviteFormError = 'Số ngày hiệu lực phải từ 1 đến 30.';
+			return;
+		}
+
+		ownerInviteFormError = '';
+
+		try {
+			isCreatingOwnerInvite = true;
+			const result = await userManagementApi.createClubInvite({
+				clubId: activeClubMembership.clubId,
+				clubRole: 'assistant',
+				inviteeEmail: normalizedEmail || undefined,
+				expiresInDays: ownerInviteExpiresInDays
+			});
+			ownerInviteShareUrl =
+				typeof window === 'undefined'
+					? result.shareUrl
+					: `${window.location.origin}/accept-invite/${result.token}`;
+			closeOwnerInviteModal();
+			isOwnerInviteResultModalOpen = true;
+			toastSuccess('Đã tạo link mời phụ tá.');
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể tạo link mời.');
+		} finally {
+			isCreatingOwnerInvite = false;
+		}
 	}
 
 	async function loadSyncIssues() {
@@ -693,6 +790,19 @@
 											</div>
 										{/if}
 
+										{#if canShareOwnerInvite && activeClubMembership}
+											<div class="mt-4">
+												<button
+													type="button"
+													class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl border border-(--app-line) bg-slate-50 px-4 py-3 text-sm font-semibold text-(--app-ink) transition hover:bg-slate-100"
+													onclick={openOwnerInviteModal}
+												>
+													<span class="icon-[mdi--account-plus-outline] size-4"></span>
+													<span>Mời phụ tá vào {activeClubMembership.clubName}</span>
+												</button>
+											</div>
+										{/if}
+
 										<div class="mt-4 flex gap-2">
 											<button
 												type="button"
@@ -739,6 +849,121 @@
 {/if}
 
 <ToastViewport />
+
+<AppModal
+	open={isOwnerInviteModalOpen}
+	title="Tạo link mời phụ tá"
+	description={activeClubMembership
+		? `Tạo link mời phụ tá cho ${activeClubMembership.clubName}.`
+		: 'Tạo link mời phụ tá cho CLB hiện tại.'}
+	size="md"
+	onClose={closeOwnerInviteModal}
+>
+	<form class="space-y-4" onsubmit={handleOwnerInviteSubmit}>
+		<label class="block space-y-2">
+			<span class="text-sm font-medium text-slate-700">CLB</span>
+			<input
+				type="text"
+				class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900"
+				readonly
+				value={activeClubMembership?.clubName ?? ''}
+			/>
+		</label>
+
+		<label class="block space-y-2">
+			<span class="text-sm font-medium text-slate-700">Vai trò được mời</span>
+			<input
+				type="text"
+				class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900"
+				readonly
+				value="Phụ tá"
+			/>
+		</label>
+
+		<label class="block space-y-2">
+			<span class="text-sm font-medium text-slate-700">Email người nhận</span>
+			<input
+				type="email"
+				class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+				bind:value={ownerInviteEmail}
+				placeholder="Để trống nếu không khóa theo email"
+			/>
+			<p class="text-xs text-slate-500">
+				Nếu nhập email, chỉ đúng tài khoản đó mới có thể nhận lời mời.
+			</p>
+		</label>
+
+		<label class="block space-y-2">
+			<span class="text-sm font-medium text-slate-700">Hiệu lực (ngày)</span>
+			<input
+				type="number"
+				min="1"
+				max="30"
+				class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+				bind:value={ownerInviteExpiresInDays}
+				required
+			/>
+		</label>
+
+		{#if ownerInviteFormError}
+			<p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+				{ownerInviteFormError}
+			</p>
+		{/if}
+
+		<div class="flex gap-3">
+			<button
+				type="submit"
+				class="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+				disabled={isCreatingOwnerInvite}
+			>
+				{isCreatingOwnerInvite ? 'Đang tạo...' : 'Tạo link mời'}
+			</button>
+			<button
+				type="button"
+				class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700"
+				onclick={closeOwnerInviteModal}
+			>
+				Hủy
+			</button>
+		</div>
+	</form>
+</AppModal>
+
+<AppModal
+	open={isOwnerInviteResultModalOpen}
+	title="Link mời phụ tá"
+	description="Copy link này và gửi cho người nhận. Hệ thống chỉ hiển thị đầy đủ link ngay sau khi tạo."
+	size="md"
+	onClose={closeOwnerInviteResultModal}
+>
+	<div class="space-y-4">
+		<label class="block space-y-2">
+			<span class="text-sm font-medium text-slate-700">Link mời</span>
+			<textarea
+				class="min-h-28 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-800"
+				readonly
+				value={ownerInviteShareUrl}
+			></textarea>
+		</label>
+		<div class="flex gap-3">
+			<button
+				type="button"
+				class="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+				onclick={() => void copyText(ownerInviteShareUrl, 'Đã copy link mời.')}
+			>
+				Copy link
+			</button>
+			<button
+				type="button"
+				class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700"
+				onclick={closeOwnerInviteResultModal}
+			>
+				Đóng
+			</button>
+		</div>
+	</div>
+</AppModal>
 
 <AppModal
 	open={syncIssuesOpen}
