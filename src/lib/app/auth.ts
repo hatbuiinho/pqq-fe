@@ -70,6 +70,10 @@ type AuthMeResponse = {
 	memberships: AuthClubMembership[];
 };
 
+type AuthLoginPayload = AuthMeResponse & {
+	token: string;
+};
+
 export const authSession = writable<AuthSession | null>(null);
 
 const ALL_PERMISSION_KEYS: AuthClubPermissionKey[] = [
@@ -161,7 +165,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
 		body: JSON.stringify({ email, password })
 	});
 	const payload = (await response.json().catch(() => null)) as
-		| (AuthMeResponse & { token: string })
+		| AuthLoginPayload
 		| { error?: string }
 		| null;
 
@@ -171,17 +175,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
 		);
 	}
 
-	const session: AuthSession = {
-		token: payload.token,
-		user: payload.user,
-		memberships: payload.memberships,
-		activeClubId: ensureActiveClubId(undefined, payload.memberships),
-		clubPermissionsByClubId: {}
-	};
-	await resetLocalStateForAuthenticatedUser();
-	authSession.set(session);
-	persistSession(session);
-	return session;
+	return establishAuthenticatedSession(payload);
 }
 
 export async function refreshAuthSession(): Promise<AuthSession | null> {
@@ -250,6 +244,22 @@ export async function logout(redirectTo: '/login' | '/' = '/login') {
 	clearAuthSession();
 	await resetLocalStateForAuthenticatedUser();
 	await goto(resolve(redirectTo));
+}
+
+export async function establishAuthenticatedSession(
+	payload: AuthLoginPayload
+): Promise<AuthSession> {
+	const session: AuthSession = {
+		token: payload.token,
+		user: payload.user,
+		memberships: payload.memberships,
+		activeClubId: ensureActiveClubId(undefined, payload.memberships),
+		clubPermissionsByClubId: {}
+	};
+	await resetLocalStateForAuthenticatedUser();
+	authSession.set(session);
+	persistSession(session);
+	return session;
 }
 
 export function setActiveClubId(clubId: string) {

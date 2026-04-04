@@ -16,8 +16,10 @@
 	import { toastError, toastSuccess } from '$lib/app/toast';
 	import { normalizeSearchText } from '$lib/domain/string-utils';
 	import type {
+		ClubInvite,
 		Club,
 		ClubRole,
+		CreateClubInvitePayload,
 		CreateUserPayload,
 		SystemRole,
 		UserAccount,
@@ -27,6 +29,8 @@
 	type CreateUserForm = CreateUserPayload;
 	type CreateUserErrors = Partial<Record<'email' | 'fullName' | 'password', string>>;
 	type MembershipFormErrors = Partial<Record<'clubId', string>>;
+	type CreateInviteForm = CreateClubInvitePayload;
+	type CreateInviteErrors = Partial<Record<'clubId' | 'inviteeEmail' | 'expiresInDays', string>>;
 
 	const initialCreateUserForm: CreateUserForm = {
 		email: '',
@@ -34,6 +38,12 @@
 		password: '',
 		systemRole: 'user',
 		isActive: true
+	};
+	const initialCreateInviteForm: CreateInviteForm = {
+		clubId: '',
+		clubRole: 'assistant',
+		inviteeEmail: '',
+		expiresInDays: 7
 	};
 
 	const systemRoleOptions: Array<{ label: string; value: SystemRole }> = [
@@ -70,6 +80,15 @@
 	let membershipFormErrors = $state<MembershipFormErrors>({});
 	let isAddingMembership = $state(false);
 	let removingMembershipId = $state('');
+	let invites = $state<ClubInvite[]>([]);
+	let isLoadingInvites = $state(false);
+	let isCreateInviteModalOpen = $state(false);
+	let isCreatingInvite = $state(false);
+	let isInviteResultModalOpen = $state(false);
+	let latestInviteShareUrl = $state('');
+	let createInviteForm = $state<CreateInviteForm>({ ...initialCreateInviteForm });
+	let createInviteErrors = $state<CreateInviteErrors>({});
+	let revokingInviteId = $state('');
 	let hasRequestedInitialData = $state(false);
 	const canManageUsers = $derived.by(() =>
 		hasSystemPermissionForSession($authSession, 'users:manage')
@@ -142,7 +161,7 @@
 	});
 
 	async function loadInitialData() {
-		await Promise.all([loadUsers(), loadClubs()]);
+		await Promise.all([loadUsers(), loadClubs(), loadInvites()]);
 	}
 
 	async function loadUsers() {
@@ -161,6 +180,17 @@
 			clubs = await clubUseCases.list();
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Không thể tải danh sách CLB.');
+		}
+	}
+
+	async function loadInvites() {
+		try {
+			isLoadingInvites = true;
+			invites = await userManagementApi.listClubInvites();
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể tải danh sách link mời.');
+		} finally {
+			isLoadingInvites = false;
 		}
 	}
 
@@ -209,6 +239,81 @@
 
 	function getClubRoleLabel(clubRole: ClubRole): string {
 		return clubRole === 'owner' ? 'Chủ nhiệm' : 'Phụ tá';
+	}
+
+	function getInviteStatusLabel(invite: ClubInvite): string {
+		if (invite.revokedAt) return 'Đã thu hồi';
+		if (invite.acceptedAt) return 'Đã sử dụng';
+		if (new Date(invite.expiresAt).getTime() < Date.now()) return 'Hết hạn';
+		return 'Đang hiệu lực';
+	}
+
+	function getInviteStatusClass(invite: ClubInvite): string {
+		if (invite.revokedAt) return 'border-slate-200 bg-slate-100 text-slate-600';
+		if (invite.acceptedAt) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+		if (new Date(invite.expiresAt).getTime() < Date.now()) return 'border-amber-200 bg-amber-50 text-amber-700';
+		return 'border-sky-200 bg-sky-50 text-sky-700';
+	}
+
+	function resetCreateInviteForm() {
+		createInviteForm = { ...initialCreateInviteForm };
+		createInviteErrors = {};
+	}
+
+	function openCreateInviteModal() {
+		resetCreateInviteForm();
+		isCreateInviteModalOpen = true;
+	}
+
+	function closeCreateInviteModal() {
+		isCreateInviteModalOpen = false;
+		resetCreateInviteForm();
+	}
+
+	function closeInviteResultModal() {
+		isInviteResultModalOpen = false;
+		latestInviteShareUrl = '';
+	}
+
+	function validateCreateInviteForm(): boolean {
+		const nextErrors: CreateInviteErrors = {};
+		const normalizedInviteeEmail = createInviteForm.inviteeEmail?.trim() ?? '';
+		if (!createInviteForm.clubId) {
+			nextErrors.clubId = 'Vui lòng chọn CLB.';
+		}
+		if (normalizedInviteeEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedInviteeEmail)) {
+			nextErrors.inviteeEmail = 'Email không hợp lệ.';
+		}
+		if (
+			!Number.isInteger(createInviteForm.expiresInDays) ||
+			createInviteForm.expiresInDays < 1 ||
+			createInviteForm.expiresInDays > 30
+		) {
+			nextErrors.expiresInDays = 'Số ngày hiệu lực phải từ 1 đến 30.';
+		}
+		createInviteErrors = nextErrors;
+		return Object.keys(nextErrors).length === 0;
+	}
+
+	async function copyText(value: string, successMessage: string) {
+		try {
+			if (navigator.clipboard?.writeText) {
+				await navigator.clipboard.writeText(value);
+			} else {
+				const textarea = document.createElement('textarea');
+				textarea.value = value;
+				textarea.setAttribute('readonly', 'true');
+				textarea.style.position = 'absolute';
+				textarea.style.left = '-9999px';
+				document.body.appendChild(textarea);
+				textarea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textarea);
+			}
+			toastSuccess(successMessage);
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể copy nội dung.');
+		}
 	}
 
 	function resetMembershipForm() {
@@ -381,6 +486,50 @@
 			isResettingPassword = false;
 		}
 	}
+
+	async function handleCreateInviteSubmit(event: SubmitEvent) {
+		event.preventDefault();
+		if (!validateCreateInviteForm()) return;
+
+		try {
+			isCreatingInvite = true;
+			const result = await userManagementApi.createClubInvite({
+				clubId: createInviteForm.clubId,
+				clubRole: createInviteForm.clubRole,
+				inviteeEmail: createInviteForm.inviteeEmail?.trim() || undefined,
+				expiresInDays: createInviteForm.expiresInDays
+			});
+			latestInviteShareUrl =
+				typeof window === 'undefined'
+					? result.shareUrl
+					: `${window.location.origin}/accept-invite/${result.token}`;
+			closeCreateInviteModal();
+			isInviteResultModalOpen = true;
+			toastSuccess('Đã tạo link mời.');
+			await loadInvites();
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể tạo link mời.');
+		} finally {
+			isCreatingInvite = false;
+		}
+	}
+
+	async function handleCopyInviteLink(shareUrl: string) {
+		await copyText(shareUrl, 'Đã copy link mời.');
+	}
+
+	async function handleRevokeInvite(invite: ClubInvite) {
+		try {
+			revokingInviteId = invite.id;
+			await userManagementApi.revokeClubInvite(invite.id);
+			toastSuccess('Đã thu hồi link mời.');
+			await loadInvites();
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể thu hồi link mời.');
+		} finally {
+			revokingInviteId = '';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -526,6 +675,70 @@
 				<DataPagination bind:currentPage totalItems={filteredUsers.length} {pageSize} />
 			{/if}
 		</SectionCard>
+
+		<SectionCard title="Link mời vào CLB">
+			<div class="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
+				<div class="space-y-1">
+					<h2 class="font-semibold text-slate-900">Mời người dùng bằng link</h2>
+					<p class="text-sm text-slate-600">
+						Tạo link có thời hạn để chia sẻ nhanh cho chủ nhiệm hoặc phụ tá.
+					</p>
+				</div>
+				<IconActionButton
+					icon="icon-[mdi--link-plus]"
+					label="Tạo link mời"
+					variant="primary"
+					onclick={openCreateInviteModal}
+					tooltipText={{ text: 'Tạo link mời', placement: 'bottom' }}
+				/>
+			</div>
+
+			{#if isLoadingInvites}
+				<p class="text-sm text-slate-500">Đang tải danh sách link mời...</p>
+			{:else if invites.length === 0}
+				<EmptyState
+					title="Chưa có link mời"
+					description="Tạo link mời đầu tiên để chia sẻ quyền truy cập vào CLB."
+				/>
+			{:else}
+				<div class="space-y-3">
+					{#each invites as invite (invite.id)}
+						<div class="rounded-2xl border border-slate-200 bg-white p-4">
+							<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+								<div class="min-w-0 space-y-2">
+									<div class="flex flex-wrap items-center gap-2">
+										<p class="font-semibold text-slate-900">{invite.clubName}</p>
+										<span
+											class={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getInviteStatusClass(invite)}`}
+										>
+											{getInviteStatusLabel(invite)}
+										</span>
+									</div>
+									<div class="grid gap-1 text-sm text-slate-600">
+										<p>Vai trò: {getClubRoleLabel(invite.clubRole)}</p>
+										<p>Email nhận lời mời: {invite.inviteeEmail || 'Không khóa theo email'}</p>
+										<p>Người tạo: {invite.inviterName}</p>
+										<p>Hết hạn: {new Date(invite.expiresAt).toLocaleString()}</p>
+										<p>Lượt dùng: {invite.useCount}/{invite.maxUses}</p>
+									</div>
+								</div>
+								<div class="flex flex-wrap justify-end gap-2">
+									<IconActionButton
+										icon="icon-[mdi--link-variant-remove]"
+										label={`Thu hồi link mời ${invite.clubName}`}
+										variant="danger"
+										onclick={() => void handleRevokeInvite(invite)}
+										disabled={
+											!!invite.revokedAt || !!invite.acceptedAt || revokingInviteId === invite.id
+										}
+									/>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</SectionCard>
 	{/if}
 </main>
 
@@ -648,6 +861,129 @@
 			</button>
 		</div>
 	</form>
+</AppModal>
+
+<AppModal
+	open={isCreateInviteModalOpen}
+	title="Tạo link mời"
+	description="Tạo link có thời hạn để chia sẻ cho người cần tham gia CLB."
+	onClose={closeCreateInviteModal}
+	size="md"
+>
+	<form class="grid gap-4 md:grid-cols-2" onsubmit={handleCreateInviteSubmit}>
+		<label class="space-y-1 md:col-span-2">
+			<span class="text-sm font-medium text-slate-700">CLB *</span>
+			<select
+				class:border-red-300={!!createInviteErrors.clubId}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={createInviteForm.clubId}
+				required
+			>
+				<option value="">Chọn CLB</option>
+				{#each clubs.filter((club) => !club.deletedAt && club.isActive) as club (club.id)}
+					<option value={club.id}>{club.name}</option>
+				{/each}
+			</select>
+			{#if createInviteErrors.clubId}
+				<span class="block text-xs text-red-600">{createInviteErrors.clubId}</span>
+			{/if}
+		</label>
+
+		<label class="space-y-1">
+			<span class="text-sm font-medium text-slate-700">Vai trò CLB</span>
+			<select class="w-full rounded-lg border-slate-300" bind:value={createInviteForm.clubRole}>
+				{#each clubRoleOptions as roleOption (roleOption.value)}
+					<option value={roleOption.value}>{roleOption.label}</option>
+				{/each}
+			</select>
+		</label>
+
+		<label class="space-y-1">
+			<span class="text-sm font-medium text-slate-700">Hiệu lực (ngày)</span>
+			<input
+				type="number"
+				min="1"
+				max="30"
+				class:border-red-300={!!createInviteErrors.expiresInDays}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={createInviteForm.expiresInDays}
+				required
+			/>
+			{#if createInviteErrors.expiresInDays}
+				<span class="block text-xs text-red-600">{createInviteErrors.expiresInDays}</span>
+			{/if}
+		</label>
+
+		<label class="space-y-1 md:col-span-2">
+			<span class="text-sm font-medium text-slate-700">Email người nhận</span>
+			<input
+				type="email"
+				class:border-red-300={!!createInviteErrors.inviteeEmail}
+				class="w-full rounded-lg border-slate-300"
+				bind:value={createInviteForm.inviteeEmail}
+				placeholder="Để trống nếu không khóa theo email"
+			/>
+			{#if createInviteErrors.inviteeEmail}
+				<span class="block text-xs text-red-600">{createInviteErrors.inviteeEmail}</span>
+			{:else}
+				<p class="text-xs text-slate-500">
+					Nếu nhập email, chỉ đúng tài khoản đó mới có thể nhận lời mời.
+				</p>
+			{/if}
+		</label>
+
+		<div class="flex gap-3 md:col-span-2">
+			<button
+				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+				type="submit"
+				disabled={isCreatingInvite}
+			>
+				{isCreatingInvite ? 'Đang tạo...' : 'Tạo link mời'}
+			</button>
+			<button
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				type="button"
+				onclick={closeCreateInviteModal}
+			>
+				Hủy
+			</button>
+		</div>
+	</form>
+</AppModal>
+
+<AppModal
+	open={isInviteResultModalOpen}
+	title="Link mời đã tạo"
+	description="Copy link này và gửi cho người nhận. Vì lý do bảo mật, hệ thống chỉ hiển thị toàn bộ link ngay sau khi tạo."
+	onClose={closeInviteResultModal}
+	size="md"
+>
+	<div class="space-y-4">
+		<label class="space-y-1">
+			<span class="text-sm font-medium text-slate-700">Link mời</span>
+			<textarea
+				class="min-h-28 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-800"
+				readonly
+				value={latestInviteShareUrl}
+			></textarea>
+		</label>
+		<div class="flex gap-3">
+			<button
+				type="button"
+				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+				onclick={() => void handleCopyInviteLink(latestInviteShareUrl)}
+			>
+				Copy link
+			</button>
+			<button
+				type="button"
+				class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+				onclick={closeInviteResultModal}
+			>
+				Đóng
+			</button>
+		</div>
+	</div>
 </AppModal>
 
 <AppModal

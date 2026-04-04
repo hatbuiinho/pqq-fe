@@ -113,9 +113,12 @@
 		}
 	];
 	const publicStudentDetailPattern = /^\/students\/[^/]+$/;
+	const publicAcceptInvitePattern = /^\/accept-invite\/[^/]+$/;
 	const pathname = $derived(page.url.pathname);
 	const isPublicRoute = $derived(
-		pathname === '/login' || publicStudentDetailPattern.test(pathname)
+		pathname === '/login' ||
+			publicStudentDetailPattern.test(pathname) ||
+			publicAcceptInvitePattern.test(pathname)
 	);
 	const showAppChrome = $derived(isAuthReady && !!currentAuthSession && !isPublicRoute);
 	const isSystemAdmin = $derived(currentAuthSession?.user.systemRole === 'sys_admin');

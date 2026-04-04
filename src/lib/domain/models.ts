@@ -213,3 +213,50 @@ export interface CreateUserMembershipPayload {
 	clubRole: ClubRole;
 	isActive: boolean;
 }
+
+export interface ClubInvite {
+	id: string;
+	clubId: string;
+	clubName: string;
+	inviterUserId: string;
+	inviterName: string;
+	inviteeEmail?: string;
+	clubRole: ClubRole;
+	expiresAt: string;
+	maxUses: number;
+	useCount: number;
+	lastUsedAt?: string;
+	acceptedAt?: string;
+	acceptedByUserId?: string;
+	revokedAt?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface CreateClubInvitePayload {
+	clubId: string;
+	clubRole: ClubRole;
+	inviteeEmail?: string;
+	expiresInDays: number;
+}
+
+export interface CreateClubInviteResult {
+	invite: ClubInvite;
+	token: string;
+	shareUrl: string;
+}
+
+export interface ClubInvitePreview {
+	clubId: string;
+	clubName: string;
+	clubRole: ClubRole;
+	inviterName: string;
+	inviteeEmail?: string;
+	expiresAt: string;
+}
+
+export interface AcceptClubInvitePayload {
+	email: string;
+	fullName?: string;
+	password: string;
+}

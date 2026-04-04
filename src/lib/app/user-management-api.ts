@@ -1,7 +1,12 @@
 import { withAuthHeaders } from '$lib/app/auth';
 import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 import type {
+	AcceptClubInvitePayload,
+	ClubInvite,
+	ClubInvitePreview,
 	CreateUserMembershipPayload,
+	CreateClubInvitePayload,
+	CreateClubInviteResult,
 	CreateUserPayload,
 	ResetUserPasswordPayload,
 	UpdateUserStatusPayload,
@@ -16,6 +21,10 @@ type ListUsersResponse = {
 type UserMembershipsResponse = {
 	user: UserAccount;
 	memberships: UserClubMembership[];
+};
+
+type ListClubInvitesResponse = {
+	items: ClubInvite[];
 };
 
 function buildUrl(path: string) {
@@ -100,5 +109,59 @@ export const userManagementApi = {
 			headers: withAuthHeaders()
 		});
 		return parseJson<UserClubMembership>(response);
+	},
+
+	async listClubInvites(): Promise<ClubInvite[]> {
+		const response = await fetch(buildUrl('/api/v1/auth/club-invites'), {
+			headers: withAuthHeaders()
+		});
+		const payload = await parseJson<ListClubInvitesResponse>(response);
+		return payload.items ?? [];
+	},
+
+	async createClubInvite(payload: CreateClubInvitePayload): Promise<CreateClubInviteResult> {
+		const response = await fetch(buildUrl('/api/v1/auth/club-invites'), {
+			method: 'POST',
+			headers: withAuthHeaders({
+				'Content-Type': 'application/json'
+			}),
+			body: JSON.stringify(payload)
+		});
+		return parseJson<CreateClubInviteResult>(response);
+	},
+
+	async revokeClubInvite(inviteId: string): Promise<ClubInvite> {
+		const response = await fetch(buildUrl(`/api/v1/auth/club-invites/by-id/${inviteId}/revoke`), {
+			method: 'POST',
+			headers: withAuthHeaders()
+		});
+		return parseJson<ClubInvite>(response);
+	},
+
+	async getClubInvitePreview(token: string): Promise<ClubInvitePreview> {
+		const response = await fetch(buildUrl(`/api/v1/auth/club-invites/${token}`));
+		return parseJson<ClubInvitePreview>(response);
+	},
+
+	async acceptClubInvite(
+		token: string,
+		payload: AcceptClubInvitePayload
+	): Promise<{
+		token: string;
+		user: UserAccount;
+		memberships: UserClubMembership[];
+	}> {
+		const response = await fetch(buildUrl(`/api/v1/auth/club-invites/${token}/accept`), {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		});
+		return parseJson<{
+			token: string;
+			user: UserAccount;
+			memberships: UserClubMembership[];
+		}>(response);
 	}
 };
