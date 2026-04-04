@@ -47,6 +47,13 @@ function revokeObjectUrl(cacheKey: string): void {
 	objectUrlCache.delete(cacheKey);
 }
 
+export function clearStudentAvatarObjectUrls(): void {
+	for (const url of objectUrlCache.values()) {
+		URL.revokeObjectURL(url);
+	}
+	objectUrlCache.clear();
+}
+
 function getQueuePreviewKey(item: Pick<StudentAvatarQueueItem, 'id' | 'updatedAt'>): string {
 	return `queue:${item.id}:${item.updatedAt}`;
 }

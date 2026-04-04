@@ -10,7 +10,9 @@
 	} from '$lib';
 	import type { BeltRank } from '$lib/domain/models';
 	import { beltRankUseCases } from '$lib/app/services';
+	import { authSession, hasSystemPermissionForSession } from '$lib/app/auth';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
+	import { withAuthHeaders } from '$lib/app/auth';
 	import { syncManager } from '$lib/app/sync/sync-manager';
 	import { toastError, toastSuccess } from '$lib/app/toast';
 	import { generateBeltRankId, normalizeSearchText } from '$lib/domain/string-utils';
@@ -42,6 +44,9 @@
 		description: '',
 		isActive: true
 	};
+	const isSystemAdmin = $derived.by(() =>
+		hasSystemPermissionForSession($authSession, 'users:manage')
+	);
 
 	let beltRanks = $state<BeltRank[]>([]);
 	let form = $state<BeltRankForm>({ ...initialForm });
@@ -128,6 +133,10 @@
 	}
 
 	function openCreateModal() {
+		if (!isSystemAdmin) {
+			toastError('Chỉ quản trị hệ thống mới có thể tạo cấp đai.');
+			return;
+		}
 		resetForm();
 		isModalOpen = true;
 	}
@@ -141,6 +150,10 @@
 	}
 
 	function openImportModal() {
+		if (!isSystemAdmin) {
+			toastError('Chỉ quản trị hệ thống mới có thể import cấp đai.');
+			return;
+		}
 		resetImportState();
 		isImportModalOpen = true;
 	}
@@ -164,6 +177,10 @@
 
 	function startEdit(beltRank: BeltRank) {
 		if (beltRank.deletedAt) return;
+		if (!isSystemAdmin) {
+			toastError('Chỉ quản trị hệ thống mới có thể cập nhật cấp đai.');
+			return;
+		}
 		errors = {};
 		editingId = beltRank.id;
 		form = {
@@ -246,6 +263,9 @@
 
 	async function handleDelete(beltRankId: string) {
 		try {
+			if (!isSystemAdmin) {
+				throw new Error('Chỉ quản trị hệ thống mới có thể xóa cấp đai.');
+			}
 			await beltRankUseCases.softDelete(beltRankId);
 			toastSuccess('Belt rank deleted.');
 			if (editingId === beltRankId) resetForm();
@@ -258,6 +278,9 @@
 
 	async function handleRestore(beltRankId: string) {
 		try {
+			if (!isSystemAdmin) {
+				throw new Error('Chỉ quản trị hệ thống mới có thể khôi phục cấp đai.');
+			}
 			await beltRankUseCases.restore(beltRankId);
 			toastSuccess('Belt rank restored locally.');
 			await loadBeltRanks();
@@ -290,10 +313,11 @@
 			const formData = new FormData();
 			formData.append('file', importFile);
 
-			const response = await fetch(`${getApiBaseUrl()}/api/v1/belt-ranks/import`, {
-				method: 'POST',
-				body: formData
-			});
+				const response = await fetch(`${getApiBaseUrl()}/api/v1/belt-ranks/import`, {
+					method: 'POST',
+					headers: withAuthHeaders(),
+					body: formData
+				});
 
 			const payload = (await response.json()) as BeltRankImportResponse | { error?: string };
 			if (!response.ok) {
@@ -342,6 +366,7 @@
 					icon="icon-[mdi--file-import-outline]"
 					label="Import belt ranks"
 					onclick={openImportModal}
+					disabled={!isSystemAdmin}
 					tooltipText={{ text: 'Import belt ranks', placement: 'bottom' }}
 				/>
 				<IconActionButton
@@ -349,6 +374,7 @@
 					label="Add belt rank"
 					variant="primary"
 					onclick={openCreateModal}
+					disabled={!isSystemAdmin}
 					tooltipText={{ text: 'Add belt rank', placement: 'bottom' }}
 				/>
 			{/snippet}
@@ -382,18 +408,21 @@
 									<IconActionButton
 										icon="icon-[mdi--restore]"
 										label={`Restore ${beltRank.name}`}
+										disabled={!isSystemAdmin}
 										onclick={() => handleRestore(beltRank.id)}
 									/>
 								{:else}
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
 										label={`Edit ${beltRank.name}`}
+										disabled={!isSystemAdmin}
 										onclick={() => startEdit(beltRank)}
 									/>
 									<IconActionButton
 										icon="icon-[mdi--delete-outline]"
 										label={`Delete ${beltRank.name}`}
 										variant="danger"
+										disabled={!isSystemAdmin}
 										onclick={() => handleDelete(beltRank.id)}
 									/>
 								{/if}
@@ -432,18 +461,21 @@
 											<IconActionButton
 												icon="icon-[mdi--restore]"
 												label={`Restore ${beltRank.name}`}
+												disabled={!isSystemAdmin}
 												onclick={() => handleRestore(beltRank.id)}
 											/>
 										{:else}
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
 												label={`Edit ${beltRank.name}`}
+												disabled={!isSystemAdmin}
 												onclick={() => startEdit(beltRank)}
 											/>
 											<IconActionButton
 												icon="icon-[mdi--delete-outline]"
 												label={`Delete ${beltRank.name}`}
 												variant="danger"
+												disabled={!isSystemAdmin}
 												onclick={() => handleDelete(beltRank.id)}
 											/>
 										{/if}

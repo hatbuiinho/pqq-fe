@@ -25,3 +25,10 @@ export const syncStatus = writable<SyncStatusSnapshot>(initialState);
 export function updateSyncStatus(patch: Partial<SyncStatusSnapshot>): void {
 	syncStatus.update((current) => ({ ...current, ...patch }));
 }
+
+export function resetSyncStatus(): void {
+	syncStatus.set({
+		...initialState,
+		online: typeof navigator === 'undefined' ? true : navigator.onLine
+	});
+}

@@ -166,3 +166,50 @@ export interface StudentSchedule extends BaseEntity<string> {
 	weekday: Weekday;
 	isActive: boolean;
 }
+
+export type SystemRole = 'user' | 'sys_admin';
+export type ClubRole = 'owner' | 'assistant';
+
+export interface UserAccount {
+	id: string;
+	email: string;
+	fullName: string;
+	systemRole: SystemRole;
+	isActive: boolean;
+	lastLoginAt?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface UserClubMembership {
+	id: string;
+	userId: string;
+	clubId: string;
+	clubName: string;
+	clubRole: ClubRole;
+	isActive: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface CreateUserPayload {
+	email: string;
+	fullName: string;
+	password: string;
+	systemRole: SystemRole;
+	isActive: boolean;
+}
+
+export interface UpdateUserStatusPayload {
+	isActive: boolean;
+}
+
+export interface ResetUserPasswordPayload {
+	password: string;
+}
+
+export interface CreateUserMembershipPayload {
+	clubId: string;
+	clubRole: ClubRole;
+	isActive: boolean;
+}

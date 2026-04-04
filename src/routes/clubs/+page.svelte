@@ -11,6 +11,12 @@
 	import type { Club, ClubGroup, ClubSchedule, Weekday } from '$lib/domain/models';
 	import { clubGroupUseCases, clubScheduleUseCases, clubUseCases } from '$lib/app/services';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
+	import {
+		authSession,
+		hasClubPermissionForSession,
+		hasSystemPermissionForSession,
+		withAuthHeaders
+	} from '$lib/app/auth';
 	import { syncManager } from '$lib/app/sync/sync-manager';
 	import { toastError, toastSuccess } from '$lib/app/toast';
 	import { generateUniqueClubCode, normalizeSearchText } from '$lib/domain/string-utils';
@@ -55,6 +61,9 @@
 		notes: '',
 		isActive: true
 	};
+	const isSystemAdmin = $derived.by(() =>
+		hasSystemPermissionForSession($authSession, 'users:manage')
+	);
 
 	let clubs = $state<Club[]>([]);
 	let clubGroups = $state<ClubGroup[]>([]);
@@ -187,8 +196,20 @@
 	}
 
 	function openCreateModal() {
+		if (!isSystemAdmin) {
+			toastError('Chỉ quản trị hệ thống mới có thể tạo CLB.');
+			return;
+		}
 		resetForm();
 		isModalOpen = true;
+	}
+
+	function canManageClub(clubId: string): boolean {
+		return hasClubPermissionForSession($authSession, 'club:manage', { clubId });
+	}
+
+	function canManageClubGroups(clubId: string): boolean {
+		return hasClubPermissionForSession($authSession, 'club_groups:write', { clubId });
 	}
 
 	function resetGroupForm() {
@@ -210,6 +231,10 @@
 	}
 
 	function openImportModal() {
+		if (!isSystemAdmin) {
+			toastError('Chỉ quản trị hệ thống mới có thể import CLB.');
+			return;
+		}
 		resetImportState();
 		isImportModalOpen = true;
 	}
@@ -240,6 +265,10 @@
 
 	function startEdit(club: Club) {
 		if (club.deletedAt) return;
+		if (!canManageClub(club.id)) {
+			toastError('Bạn không có quyền cập nhật CLB này.');
+			return;
+		}
 		errors = {};
 		editingId = club.id;
 		selectedTrainingDays = scheduleByClubId.get(club.id) ?? [];
@@ -255,6 +284,10 @@
 	}
 
 	async function openGroupsModal(club: Club) {
+		if (!canManageClubGroups(club.id)) {
+			toastError('Bạn không có quyền quản lý nhóm của CLB này.');
+			return;
+		}
 		selectedClubForGroups = club;
 		resetGroupForm();
 		await loadGroupsForClub(club.id);
@@ -374,6 +407,9 @@
 
 	async function handleDelete(clubId: string) {
 		try {
+			if (!canManageClub(clubId)) {
+				throw new Error('Bạn không có quyền xóa CLB này.');
+			}
 			await clubUseCases.softDelete(clubId);
 			toastSuccess('Club deleted.');
 			if (editingId === clubId) resetForm();
@@ -385,6 +421,9 @@
 
 	async function handleRestore(clubId: string) {
 		try {
+			if (!canManageClub(clubId)) {
+				throw new Error('Bạn không có quyền khôi phục CLB này.');
+			}
 			await clubUseCases.restore(clubId);
 			toastSuccess('Club restored locally.');
 			await loadClubs();
@@ -416,10 +455,11 @@
 			const formData = new FormData();
 			formData.append('file', importFile);
 
-			const response = await fetch(`${getApiBaseUrl()}/api/v1/clubs/import`, {
-				method: 'POST',
-				body: formData
-			});
+				const response = await fetch(`${getApiBaseUrl()}/api/v1/clubs/import`, {
+					method: 'POST',
+					headers: withAuthHeaders(),
+					body: formData
+				});
 
 			const payload = (await response.json()) as ClubImportResponse | { error?: string };
 			if (!response.ok) {
@@ -456,6 +496,10 @@
 	async function handleGroupSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		if (!selectedClubForGroups) return;
+		if (!canManageClubGroups(selectedClubForGroups.id)) {
+			toastError('Bạn không có quyền cập nhật nhóm của CLB này.');
+			return;
+		}
 		if (!validateGroupForm()) return;
 
 		try {
@@ -491,6 +535,9 @@
 		if (!selectedClubForGroups) return;
 
 		try {
+			if (!canManageClubGroups(selectedClubForGroups.id)) {
+				throw new Error('Bạn không có quyền xóa nhóm của CLB này.');
+			}
 			await clubGroupUseCases.softDelete(groupId);
 			toastSuccess('Group deleted.');
 			if (editingGroupId === groupId) resetGroupForm();
@@ -505,6 +552,9 @@
 		if (!selectedClubForGroups) return;
 
 		try {
+			if (!canManageClubGroups(selectedClubForGroups.id)) {
+				throw new Error('Bạn không có quyền khôi phục nhóm của CLB này.');
+			}
 			await clubGroupUseCases.restore(groupId);
 			toastSuccess('Group restored.');
 			await loadClubs();
@@ -529,6 +579,7 @@
 					icon="icon-[mdi--file-import-outline]"
 					label="Import clubs"
 					onclick={openImportModal}
+					disabled={!isSystemAdmin}
 					tooltipText={{ text: 'Import clubs', placement: 'bottom' }}
 				/>
 				<IconActionButton
@@ -536,6 +587,7 @@
 					label="Add club"
 					variant="primary"
 					onclick={openCreateModal}
+					disabled={!isSystemAdmin}
 					tooltipText={{ text: 'Add club', placement: 'bottom' }}
 				/>
 			{/snippet}
@@ -568,23 +620,27 @@
 									<IconActionButton
 										icon="icon-[mdi--restore]"
 										label={`Restore ${club.name}`}
+										disabled={!canManageClub(club.id)}
 										onclick={() => handleRestore(club.id)}
 									/>
 								{:else}
 									<IconActionButton
 										icon="icon-[mdi--account-multiple-outline]"
 										label={`Manage groups for ${club.name}`}
+										disabled={!canManageClubGroups(club.id)}
 										onclick={() => openGroupsModal(club)}
 									/>
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
 										label={`Edit ${club.name}`}
+										disabled={!canManageClub(club.id)}
 										onclick={() => startEdit(club)}
 									/>
 									<IconActionButton
 										icon="icon-[mdi--delete-outline]"
 										label={`Delete ${club.name}`}
 										variant="danger"
+										disabled={!canManageClub(club.id)}
 										onclick={() => handleDelete(club.id)}
 									/>
 								{/if}
@@ -624,23 +680,27 @@
 											<IconActionButton
 												icon="icon-[mdi--restore]"
 												label={`Restore ${club.name}`}
+												disabled={!canManageClub(club.id)}
 												onclick={() => handleRestore(club.id)}
 											/>
 										{:else}
 											<IconActionButton
 												icon="icon-[mdi--account-multiple-outline]"
 												label={`Manage groups for ${club.name}`}
+												disabled={!canManageClubGroups(club.id)}
 												onclick={() => openGroupsModal(club)}
 											/>
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
 												label={`Edit ${club.name}`}
+												disabled={!canManageClub(club.id)}
 												onclick={() => startEdit(club)}
 											/>
 											<IconActionButton
 												icon="icon-[mdi--delete-outline]"
 												label={`Delete ${club.name}`}
 												variant="danger"
+												disabled={!canManageClub(club.id)}
 												onclick={() => handleDelete(club.id)}
 											/>
 										{/if}
@@ -842,18 +902,21 @@
 										<IconActionButton
 											icon="icon-[mdi--restore]"
 											label={`Restore ${group.name}`}
+											disabled={!selectedClubForGroups || !canManageClubGroups(selectedClubForGroups.id)}
 											onclick={() => handleRestoreGroup(group.id)}
 										/>
 									{:else}
 										<IconActionButton
 											icon="icon-[mdi--pencil-outline]"
 											label={`Edit ${group.name}`}
+											disabled={!selectedClubForGroups || !canManageClubGroups(selectedClubForGroups.id)}
 											onclick={() => startEditGroup(group)}
 										/>
 										<IconActionButton
 											icon="icon-[mdi--delete-outline]"
 											label={`Delete ${group.name}`}
 											variant="danger"
+											disabled={!selectedClubForGroups || !canManageClubGroups(selectedClubForGroups.id)}
 											onclick={() => handleDeleteGroup(group.id)}
 										/>
 									{/if}

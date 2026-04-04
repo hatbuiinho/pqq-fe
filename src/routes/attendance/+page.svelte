@@ -3,7 +3,10 @@
 	import {
 		AppDatePicker,
 		AppModal,
+		authSession,
 		EmptyState,
+		hasClubPermissionForSession,
+		hasSystemPermissionForSession,
 		IconActionButton,
 		loadStudentAvatarPreviewMap,
 		PageHeader,
@@ -214,6 +217,10 @@
 		{ label: 'Ngưng học', value: 'inactive' },
 		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
+	const isSystemAdmin = $derived.by(() =>
+		hasSystemPermissionForSession($authSession, 'users:manage')
+	);
+	const fixedClubId = $derived.by(() => $authSession?.activeClubId ?? '');
 
 	const clubMap = $derived.by(() =>
 		Object.fromEntries(clubs.map((club) => [club.id, club])) as Record<string, Club>
@@ -236,7 +243,16 @@
 		return map;
 	});
 	const availableClubs = $derived.by(() =>
-		clubs.filter((club) => !club.deletedAt && club.isActive && club.syncStatus === 'synced')
+		clubs.filter(
+			(club) =>
+				!club.deletedAt &&
+				club.isActive &&
+				club.syncStatus === 'synced' &&
+				(isSystemAdmin || club.id === fixedClubId)
+		)
+	);
+	const visibleSessions = $derived.by(() =>
+		sessions.filter((sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
 	);
 	const availableGroupsForSession = $derived.by(() => {
 		if (!sessionClub) return [];
@@ -277,9 +293,9 @@
 	const filteredSessions = $derived.by(() => {
 		const query = normalizeSearchText(sessionSearch);
 		const dateFilter = sessionDateFilter;
-		if (!query && !dateFilter) return sessions;
+		if (!query && !dateFilter) return visibleSessions;
 
-		return sessions.filter((sessionItem) => {
+		return visibleSessions.filter((sessionItem) => {
 			const clubName = clubMap[sessionItem.clubId]?.name ?? '';
 			const matchesQuery =
 				!query ||
@@ -462,7 +478,32 @@
 		return map;
 	});
 	const hasClubs = $derived.by(() => availableClubs.length > 0);
+	const canOpenSetupModal = $derived.by(() =>
+		availableClubs.some((club) =>
+			hasClubPermissionForSession($authSession, 'attendance:write', { clubId: club.id })
+		)
+	);
 	const isCompleted = $derived.by(() => session?.status === 'completed');
+	const canCreateAttendanceSession = $derived.by(
+		() =>
+			!!setupClubId &&
+			hasClubPermissionForSession($authSession, 'attendance:write', { clubId: setupClubId })
+	);
+	const canManageCurrentSession = $derived.by(
+		() =>
+			!!session &&
+			hasClubPermissionForSession($authSession, 'attendance:write', { clubId: session.clubId })
+	);
+	const canEditCurrentSessionStudents = $derived.by(
+		() =>
+			!!session &&
+			hasClubPermissionForSession($authSession, 'students:write', { clubId: session.clubId })
+	);
+	const canManageCurrentSessionMedia = $derived.by(
+		() =>
+			!!session &&
+			hasClubPermissionForSession($authSession, 'media:manage', { clubId: session.clubId })
+	);
 	const canReopenSelectedSession = $derived.by(() => {
 		if (!session || session.status !== 'completed') return true;
 		return session.sessionDate === getTodayIsoDate();
@@ -493,6 +534,13 @@
 			}
 			void refreshCurrentView();
 		});
+	});
+
+	$effect(() => {
+		if (isSystemAdmin || !fixedClubId) return;
+		if (setupClubId !== fixedClubId) {
+			setupClubId = fixedClubId;
+		}
 	});
 
 	function suppressLocalRefreshWindow(durationMs = 4000) {
@@ -537,7 +585,9 @@
 				null;
 			setupClubId = defaultClub?.id ?? '';
 			setupNotes = '';
-			selectedSessionId = sessionRows[0]?.id ?? '';
+			selectedSessionId =
+				sessionRows.find((sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
+					?.id ?? '';
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Không thể tải dữ liệu điểm danh.');
 		}
@@ -570,13 +620,21 @@
 
 		if (
 			selectedSessionId &&
-			!sessionRows.some((sessionItem) => sessionItem.id === selectedSessionId)
+			!sessionRows.some(
+				(sessionItem) =>
+					sessionItem.id === selectedSessionId &&
+					(isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
+			)
 		) {
-			selectedSessionId = sessionRows[0]?.id ?? '';
+			selectedSessionId =
+				sessionRows.find((sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
+					?.id ?? '';
 		}
 
 		if (!selectedSessionId && sessionRows.length > 0) {
-			selectedSessionId = sessionRows[0].id;
+			selectedSessionId =
+				sessionRows.find((sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
+					?.id ?? '';
 		}
 
 		await loadSelectedSession();
@@ -627,6 +685,10 @@
 	}
 
 	function openSetupModal() {
+		if (!canOpenSetupModal) {
+			toastError('Bạn không có quyền tạo buổi điểm danh.');
+			return;
+		}
 		formErrors = {};
 		if (!setupClubId) {
 			setupClubId = availableClubs[0]?.id ?? '';
@@ -762,6 +824,10 @@
 
 	async function handleMarkAllPresent() {
 		if (!session) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật buổi điểm danh này.');
+			return;
+		}
 
 		try {
 			isApplyingBulk = true;
@@ -782,6 +848,10 @@
 
 	async function handleSessionStatusToggle() {
 		if (!session) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật buổi điểm danh này.');
+			return;
+		}
 
 		try {
 			if (session.status === 'completed' && session.sessionDate !== getTodayIsoDate()) {
@@ -810,6 +880,15 @@
 
 	async function handleDeleteSession(sessionId: string) {
 		try {
+			const targetSession = sessions.find((sessionItem) => sessionItem.id === sessionId);
+			if (
+				!targetSession ||
+				!hasClubPermissionForSession($authSession, 'attendance:write', {
+					clubId: targetSession.clubId
+				})
+			) {
+				throw new Error('Bạn không có quyền xóa buổi điểm danh này.');
+			}
 			isDeletingSession = true;
 			suppressLocalRefresh = true;
 			suppressSyncRefreshWindow();
@@ -826,6 +905,10 @@
 
 	async function handleSaveSessionNotes() {
 		if (!session) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật buổi điểm danh này.');
+			return;
+		}
 
 		try {
 			isSavingSessionNotes = true;
@@ -861,6 +944,10 @@
 
 	async function handleStatusChange(studentId: string, attendanceStatus: AttendanceStatus) {
 		if (!session) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật buổi điểm danh này.');
+			return;
+		}
 
 		try {
 			isChangingStatus = true;
@@ -883,6 +970,10 @@
 	}
 
 	function openStudentNoteModal(item: AttendanceItem) {
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật ghi chú điểm danh.');
+			return;
+		}
 		selectedStudentNoteId = item.student.id;
 		selectedStudentNoteName = item.student.fullName;
 		studentNoteDraft = item.record.notes ?? '';
@@ -897,6 +988,10 @@
 	}
 
 	async function openStudentDetailModal(item: AttendanceItem) {
+		if (!hasClubPermissionForSession($authSession, 'students:write', { clubId: item.student.clubId })) {
+			toastError('Bạn không có quyền cập nhật võ sinh này.');
+			return;
+		}
 		selectedStudentDetailId = item.student.id;
 		selectedStudentDetailCode = item.student.studentCode ?? '';
 		studentDetailErrors = {};
@@ -948,6 +1043,10 @@
 	async function handleSaveStudentDetail() {
 		if (!selectedStudentDetailId || !sessionClub) return;
 		if (!validateStudentDetailForm()) return;
+		if (!canEditCurrentSessionStudents) {
+			toastError('Bạn không có quyền cập nhật võ sinh trong CLB này.');
+			return;
+		}
 
 		try {
 			isSavingStudentDetail = true;
@@ -986,6 +1085,10 @@
 
 	async function handleSaveStudentNote() {
 		if (!session || !selectedStudentNoteId) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật ghi chú điểm danh.');
+			return;
+		}
 
 		try {
 			isSavingStudentNote = true;
@@ -1271,6 +1374,7 @@
 				label="Tạo buổi điểm danh"
 				variant="primary"
 				onclick={openSetupModal}
+				disabled={!canOpenSetupModal}
 				tooltipText={{ text: 'Tạo buổi điểm danh', placement: 'bottom' }}
 			/>
 			{#if showMobileDetail}
@@ -1468,7 +1572,7 @@
 								type="button"
 								class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
 								onclick={handleMarkAllPresent}
-								disabled={isCompleted || isApplyingBulk || isChangingStatus}
+								disabled={isCompleted || isApplyingBulk || isChangingStatus || !canManageCurrentSession}
 							>
 								{isApplyingBulk ? 'Đang cập nhật...' : 'Điểm danh có mặt tất cả'}
 							</button>
@@ -1480,7 +1584,7 @@
 										: 'bg-slate-900 text-white hover:bg-slate-800'
 								} disabled:opacity-60`}
 								onclick={handleSessionStatusToggle}
-								disabled={sessionStatusToggleDisabled}
+								disabled={sessionStatusToggleDisabled || !canManageCurrentSession}
 								title={isCompleted && !canReopenSelectedSession
 									? 'Chỉ có thể mở lại buổi điểm danh trong ngày.'
 									: undefined}
@@ -1497,7 +1601,7 @@
 								type="button"
 								class="inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
 								onclick={() => openDeleteConfirm(currentSession.id)}
-								disabled={isDeletingSession}
+								disabled={isDeletingSession || !canManageCurrentSession}
 							>
 								{isDeletingSession ? 'Đang xóa...' : 'Xóa buổi'}
 							</button>
@@ -1686,7 +1790,7 @@
 													type="button"
 													class={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${getStatusButtonClass(item.record.attendanceStatus, statusOption.value)}`}
 													onclick={() => handleStatusChange(item.student.id, statusOption.value)}
-													disabled={isCompleted || isChangingStatus}
+													disabled={isCompleted || isChangingStatus || !canManageCurrentSession}
 													aria-label={statusOption.label}
 													title={statusOption.label}
 													use:tooltip={{ text: statusOption.label, placement: 'top' }}
@@ -1719,7 +1823,11 @@
 								type="button"
 								class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
 								onclick={handleSaveSessionNotes}
-								disabled={isSavingSessionNotes || sessionNoteDraft === (session?.notes ?? '')}
+								disabled={
+									isSavingSessionNotes ||
+									sessionNoteDraft === (session?.notes ?? '') ||
+									!canManageCurrentSession
+								}
 							>
 								{isSavingSessionNotes ? 'Đang lưu...' : 'Lưu'}
 							</button>
@@ -1953,16 +2061,25 @@
 	<form class="space-y-4" onsubmit={handleCreateSessionSubmit}>
 		<label class="space-y-2">
 			<span class="text-sm font-medium text-slate-700">CLB *</span>
-			<select
-				class:border-red-300={!!formErrors.clubId}
-				class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-				bind:value={setupClubId}
-			>
-				<option value="">Chọn CLB</option>
-				{#each availableClubs as club (club.id)}
-					<option value={club.id}>{club.name}</option>
-				{/each}
-			</select>
+			{#if isSystemAdmin}
+				<select
+					class:border-red-300={!!formErrors.clubId}
+					class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+					bind:value={setupClubId}
+				>
+					<option value="">Chọn CLB</option>
+					{#each availableClubs as club (club.id)}
+						<option value={club.id}>{club.name}</option>
+					{/each}
+				</select>
+			{:else}
+				<input
+					class="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-500"
+					value={clubMap[setupClubId]?.name ?? ''}
+					readonly
+					disabled
+				/>
+			{/if}
 			{#if formErrors.clubId}
 				<span class="block text-xs text-red-600">{formErrors.clubId}</span>
 			{/if}
@@ -1996,7 +2113,7 @@
 			<button
 				type="submit"
 				class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-				disabled={!hasClubs || isCreating}
+				disabled={!hasClubs || isCreating || !canCreateAttendanceSession}
 			>
 				{isCreating ? 'Đang tạo...' : 'Tạo buổi'}
 			</button>
@@ -2057,6 +2174,7 @@
 	showStatusField={true}
 	studentCodeDisplay={selectedStudentDetailCode || 'Sẽ tạo khi đồng bộ'}
 	statusOptions={[...studentStatusOptions]}
+	canManageAvatars={canManageCurrentSessionMedia}
 />
 
 <AppModal
@@ -2086,7 +2204,7 @@
 				type="button"
 				class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
 				onclick={handleSaveStudentNote}
-				disabled={isSavingStudentNote}
+				disabled={isSavingStudentNote || !canManageCurrentSession}
 			>
 				{isSavingStudentNote ? 'Đang lưu...' : 'Lưu ghi chú'}
 			</button>

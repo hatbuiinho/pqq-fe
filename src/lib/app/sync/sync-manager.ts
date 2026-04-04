@@ -18,6 +18,7 @@ import type {
 	SyncRealtimeEvent
 } from '$lib/domain/sync';
 import { emitDataChanged, subscribeDataChanged } from '$lib/app/data-events';
+import { getAuthToken } from '$lib/app/auth';
 import { toastError, toastSuccess } from '$lib/app/toast';
 import { updateSyncStatus } from '$lib/app/sync/sync-status';
 import { getApiBaseUrl, getWebSocketUrl } from '$lib/app/sync/sync-config';
@@ -45,7 +46,7 @@ type SyncRecordMap = {
 
 class SyncManager {
 	private readonly apiClient = new HttpSyncApiClient(getApiBaseUrl());
-	private readonly realtimeClient = new WebSocketSyncClient(getWebSocketUrl());
+	private realtimeClient: WebSocketSyncClient | null = null;
 	private isStarted = false;
 	private isSyncing = false;
 	private hasQueuedSync = false;
@@ -76,7 +77,8 @@ class SyncManager {
 	stop(): void {
 		if (!browser || !this.isStarted) return;
 		this.isStarted = false;
-		this.realtimeClient.disconnect();
+		this.realtimeClient?.disconnect();
+		this.realtimeClient = null;
 
 		if (this.pullDebounceTimer) {
 			window.clearTimeout(this.pullDebounceTimer);
@@ -140,12 +142,22 @@ class SyncManager {
 	}
 
 	async rebaseFromServer(): Promise<void> {
+		await this.rebaseFromServerInternal({ silent: false });
+	}
+
+	async hydrateCurrentSession(): Promise<void> {
+		await this.rebaseFromServerInternal({ silent: true });
+	}
+
+	private async rebaseFromServerInternal(options: { silent: boolean }): Promise<void> {
 		if (!browser || !navigator.onLine) {
 			updateSyncStatus({
 				online: browser ? navigator.onLine : true,
 				lastError: 'Cannot rebase while offline.'
 			});
-			toastError('Cannot rebase while offline.');
+			if (!options.silent) {
+				toastError('Cannot rebase while offline.');
+			}
 			return;
 		}
 
@@ -253,15 +265,19 @@ class SyncManager {
 
 			await this.refreshPendingCount();
 			emitDataChanged('sync');
-			toastSuccess(
-				addedCount > 0
-					? `Rebase completed. Imported ${addedCount} record(s).`
-					: 'Rebase completed. No missing records found.'
-			);
+			if (!options.silent) {
+				toastSuccess(
+					addedCount > 0
+						? `Rebase completed. Imported ${addedCount} record(s).`
+						: 'Rebase completed. No missing records found.'
+				);
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Rebase failed.';
 			updateSyncStatus({ lastError: message });
-			toastError(message);
+			if (!options.silent) {
+				toastError(message);
+			}
 		} finally {
 			updateSyncStatus({ isSyncing: false, online: navigator.onLine });
 		}
@@ -276,7 +292,8 @@ class SyncManager {
 
 	private readonly handleOffline = () => {
 		updateSyncStatus({ online: false, connectionState: 'disconnected' });
-		this.realtimeClient.disconnect();
+		this.realtimeClient?.disconnect();
+		this.realtimeClient = null;
 		if (this.pollTimer) {
 			window.clearInterval(this.pollTimer);
 			this.pollTimer = null;
@@ -286,6 +303,14 @@ class SyncManager {
 	private connectRealtime(): void {
 		if (!browser || !navigator.onLine) return;
 
+		const realtimeUrl = new URL(getWebSocketUrl());
+		const accessToken = getAuthToken();
+		if (accessToken) {
+			realtimeUrl.searchParams.set('access_token', accessToken);
+		}
+
+		this.realtimeClient?.disconnect();
+		this.realtimeClient = new WebSocketSyncClient(realtimeUrl.toString());
 		updateSyncStatus({ connectionState: 'connecting' });
 		this.realtimeClient.connect({
 			onEvent: (event) => this.handleRealtimeEvent(event),

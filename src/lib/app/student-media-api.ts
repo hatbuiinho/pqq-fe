@@ -1,3 +1,4 @@
+import { withAuthHeaders } from '$lib/app/auth';
 import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 import type { AvatarImportBatch, AvatarImportBatchItem, StudentAvatar } from '$lib/domain/models';
 
@@ -39,7 +40,9 @@ async function parseJson<T>(response: Response): Promise<T> {
 
 export const studentMediaApi = {
 	async listAvatars(studentId: string): Promise<StudentAvatar[]> {
-		const response = await fetch(buildUrl(`/api/v1/students/${studentId}/avatars`));
+		const response = await fetch(buildUrl(`/api/v1/students/${studentId}/avatars`), {
+			headers: withAuthHeaders()
+		});
 		const payload = await parseJson<ListStudentAvatarsResponse>(response);
 		return payload.items ?? [];
 	},
@@ -50,6 +53,7 @@ export const studentMediaApi = {
 
 		const response = await fetch(buildUrl(`/api/v1/students/${studentId}/avatars`), {
 			method: 'POST',
+			headers: withAuthHeaders(),
 			body: formData
 		});
 
@@ -59,11 +63,12 @@ export const studentMediaApi = {
 
 	async setPrimaryAvatar(studentId: string, mediaId: string): Promise<StudentAvatar> {
 		const response = await fetch(
-			buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/primary`),
-			{
-				method: 'POST'
-			}
-		);
+				buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/primary`),
+				{
+					method: 'POST',
+					headers: withAuthHeaders()
+				}
+			);
 
 		const payload = await parseJson<SetPrimaryStudentAvatarResponse>(response);
 		return payload.avatar;
@@ -71,11 +76,12 @@ export const studentMediaApi = {
 
 	async deleteAvatar(studentId: string, mediaId: string): Promise<void> {
 		const response = await fetch(
-			buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/delete`),
-			{
-				method: 'POST'
-			}
-		);
+				buildUrl(`/api/v1/students/${studentId}/avatars/${mediaId}/delete`),
+				{
+					method: 'POST',
+					headers: withAuthHeaders()
+				}
+			);
 
 		await parseJson<{ success: boolean }>(response);
 	},
@@ -93,6 +99,7 @@ export const studentMediaApi = {
 
 		const response = await fetch(buildUrl('/api/v1/media/avatar-imports/analyze'), {
 			method: 'POST',
+			headers: withAuthHeaders(),
 			body: formData
 		});
 
@@ -100,7 +107,9 @@ export const studentMediaApi = {
 	},
 
 	async getAvatarImportBatch(batchId: string): Promise<AnalyzeAvatarImportResponse> {
-		const response = await fetch(buildUrl(`/api/v1/media/avatar-imports/${batchId}`));
+		const response = await fetch(buildUrl(`/api/v1/media/avatar-imports/${batchId}`), {
+			headers: withAuthHeaders()
+		});
 		return parseJson<AnalyzeAvatarImportResponse>(response);
 	},
 
@@ -111,9 +120,9 @@ export const studentMediaApi = {
 	): Promise<ConfirmAvatarImportResponse> {
 		const response = await fetch(buildUrl(`/api/v1/media/avatar-imports/${batchId}/confirm`), {
 			method: 'POST',
-			headers: {
+			headers: withAuthHeaders({
 				'Content-Type': 'application/json'
-			},
+			}),
 			body: JSON.stringify({ items, replaceStrategy })
 		});
 

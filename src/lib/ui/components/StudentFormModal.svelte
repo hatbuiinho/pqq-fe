@@ -51,6 +51,7 @@
 		studentCodeDisplay?: string;
 		showStudentCode?: boolean;
 		statusOptions?: Array<{ label: string; value: StudentStatus }>;
+		canManageAvatars?: boolean;
 	};
 
 	const genderOptions: Array<{ label: string; value: Gender }> = [
@@ -87,7 +88,8 @@
 		showStatusField = true,
 		studentCodeDisplay = 'Sẽ tạo khi đồng bộ',
 		showStudentCode = true,
-		statusOptions = defaultStatusOptions
+		statusOptions = defaultStatusOptions,
+		canManageAvatars = true
 	}: Props = $props();
 
 	let avatarInput = $state<HTMLInputElement | null>(null);
@@ -439,16 +441,18 @@
 						<p class="text-xs text-slate-500">Hỗ trợ JPG, PNG hoặc WebP, tối đa 5MB.</p>
 					</div>
 					<div class="relative shrink-0 self-start sm:self-auto" bind:this={avatarUploadTrigger}>
-						<button
-							class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
-							type="button"
-							onclick={handleUploadAvatarClick}
-							disabled={isUploadingAvatar}
-						>
-							{isUploadingAvatar ? 'Đang tải lên...' : 'Tải lên avatar'}
-						</button>
+						{#if canManageAvatars}
+							<button
+								class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+								type="button"
+								onclick={handleUploadAvatarClick}
+								disabled={isUploadingAvatar}
+							>
+								{isUploadingAvatar ? 'Đang tải lên...' : 'Tải lên avatar'}
+							</button>
+						{/if}
 
-						{#if isMobileMode && isAvatarSourcePopoverOpen}
+						{#if canManageAvatars && isMobileMode && isAvatarSourcePopoverOpen}
 							<div
 								class="fixed z-70 space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"
 								style={avatarSourcePopoverStyle}
@@ -645,17 +649,19 @@
 													class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
 													type="button"
 													onclick={() => handleSetPrimaryAvatar(avatar.id)}
-													disabled={avatar.isPrimary}
+													disabled={avatar.isPrimary || !canManageAvatars}
 												>
 													Đặt làm chính
 												</button>
-												<button
-													class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600"
-													type="button"
-													onclick={() => handleDeleteAvatar(avatar.id)}
-												>
-													Xóa
-												</button>
+												{#if canManageAvatars}
+													<button
+														class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600"
+														type="button"
+														onclick={() => handleDeleteAvatar(avatar.id)}
+													>
+														Xóa
+													</button>
+												{/if}
 											</div>
 										</div>
 									{/each}

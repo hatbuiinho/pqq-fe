@@ -65,3 +65,40 @@ export function getDB(): AppDB {
 
 	return db;
 }
+
+export async function clearAppData(): Promise<void> {
+	if (!browser) return;
+
+	const database = getDB();
+	await database.transaction(
+		'rw',
+		[
+			database.clubs,
+			database.clubGroups,
+			database.clubSchedules,
+			database.beltRanks,
+			database.students,
+			database.studentAvatarQueue,
+			database.studentAvatarCache,
+			database.studentScheduleProfiles,
+			database.studentSchedules,
+			database.attendanceSessions,
+			database.attendanceRecords
+		],
+		async () => {
+			await Promise.all([
+				database.clubs.clear(),
+				database.clubGroups.clear(),
+				database.clubSchedules.clear(),
+				database.beltRanks.clear(),
+				database.students.clear(),
+				database.studentAvatarQueue.clear(),
+				database.studentAvatarCache.clear(),
+				database.studentScheduleProfiles.clear(),
+				database.studentSchedules.clear(),
+				database.attendanceSessions.clear(),
+				database.attendanceRecords.clear()
+			]);
+		}
+	);
+}

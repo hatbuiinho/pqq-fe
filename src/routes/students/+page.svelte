@@ -39,6 +39,12 @@
 	import { toastError, toastSuccess } from '$lib/app/toast';
 	import { normalizeSearchText } from '$lib/domain/string-utils';
 	import { getApiBaseUrl } from '$lib/app/sync/sync-config';
+	import {
+		authSession,
+		hasClubPermissionForSession,
+		hasSystemPermissionForSession,
+		withAuthHeaders
+	} from '$lib/app/auth';
 	import { emitDataChanged } from '$lib/app/data-events';
 	import { syncManager } from '$lib/app/sync/sync-manager';
 	import { studentMediaApi } from '$lib/app/student-media-api';
@@ -88,6 +94,21 @@
 		{ label: 'Ngưng học', value: 'inactive' },
 		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
+
+	const isSystemAdmin = $derived.by(() => hasSystemPermissionForSession($authSession, 'users:manage'));
+	const fixedClubId = $derived.by(() => $authSession?.activeClubId ?? '');
+	const canCreateStudent = $derived.by(() =>
+		hasClubPermissionForSession($authSession, 'students:write')
+	);
+	const canImportStudents = $derived.by(() =>
+		hasClubPermissionForSession($authSession, 'imports:manage')
+	);
+	const canImportAvatars = $derived.by(() =>
+		hasClubPermissionForSession($authSession, 'media:manage')
+	);
+	const canBulkEditSelectedStudents = $derived.by(
+		() => selectedStudents.length > 0 && selectedStudents.every((student) => canEditStudent(student))
+	);
 
 	let students = $state<Student[]>([]);
 	let clubs = $state<Club[]>([]);
@@ -194,7 +215,13 @@
 		form.clubId ? (clubScheduleMap.get(form.clubId) ?? []) : []
 	);
 	const assignableClubs = $derived.by(() =>
-		clubs.filter((club) => !club.deletedAt && club.syncStatus === 'synced' && club.isActive)
+		clubs.filter(
+			(club) =>
+				!club.deletedAt &&
+				club.syncStatus === 'synced' &&
+				club.isActive &&
+				(isSystemAdmin || club.id === fixedClubId)
+		)
 	);
 	const assignableGroups = $derived.by(() =>
 		clubGroups.filter(
@@ -225,7 +252,8 @@
 					beltRankMap.get(student.beltRankId) ?? ''
 				].some((value) => normalizeSearchText(value).includes(query));
 
-			const matchesClub = !selectedClubId || student.clubId === selectedClubId;
+			const effectiveSelectedClubId = isSystemAdmin ? selectedClubId : fixedClubId;
+			const matchesClub = !effectiveSelectedClubId || student.clubId === effectiveSelectedClubId;
 			const matchesGroup = !selectedGroupId || student.groupId === selectedGroupId;
 			const matchesBeltRank = !selectedBeltRankId || student.beltRankId === selectedBeltRankId;
 			const matchesStatus = !selectedStatus || student.status === selectedStatus;
@@ -280,6 +308,9 @@
 	const selectedStudents = $derived.by(() =>
 		students.filter((student) => selectedStudentIds.includes(student.id) && !student.deletedAt)
 	);
+	const editingStudent = $derived.by(
+		() => students.find((student) => student.id === editingId) ?? null
+	);
 	const selectedStudentCount = $derived.by(() => selectedStudents.length);
 	const allFilteredStudentsSelected = $derived.by(
 		() =>
@@ -309,6 +340,19 @@
 		selectedBeltRankId;
 		selectedStatus;
 		currentPage = 1;
+	});
+
+	$effect(() => {
+		if (isSystemAdmin || !fixedClubId) return;
+		if (selectedClubId !== fixedClubId) {
+			selectedClubId = fixedClubId;
+		}
+		if (!form.clubId) {
+			form.clubId = fixedClubId;
+		}
+		if (bulkActionType === 'club') {
+			bulkActionType = 'status';
+		}
 	});
 
 	$effect(() => {
@@ -523,8 +567,27 @@
 	}
 
 	function openCreateModal() {
+		if (!canCreateStudent) {
+			toastError('Bạn không có quyền tạo võ sinh trong CLB đang làm việc.');
+			return;
+		}
 		resetForm();
+		if (!isSystemAdmin && fixedClubId) {
+			form.clubId = fixedClubId;
+		}
 		isModalOpen = true;
+	}
+
+	function canEditStudent(student: Student): boolean {
+		return hasClubPermissionForSession($authSession, 'students:write', { clubId: student.clubId });
+	}
+
+	function canDeleteStudent(student: Student): boolean {
+		return hasClubPermissionForSession($authSession, 'students:delete', { clubId: student.clubId });
+	}
+
+	function canManageStudentMedia(student: Student): boolean {
+		return hasClubPermissionForSession($authSession, 'media:manage', { clubId: student.clubId });
 	}
 
 	function isStudentSelected(studentId: string) {
@@ -560,6 +623,10 @@
 
 	function openBulkActionModal() {
 		if (selectedStudentCount === 0) return;
+		if (!canBulkEditSelectedStudents) {
+			toastError('Bạn không có quyền cập nhật toàn bộ võ sinh đã chọn.');
+			return;
+		}
 		bulkActionType = 'status';
 		bulkClubId = '';
 		bulkGroupId = '';
@@ -590,6 +657,10 @@
 	}
 
 	function openImportModal() {
+		if (!canImportStudents) {
+			toastError('Bạn không có quyền import võ sinh trong CLB đang làm việc.');
+			return;
+		}
 		resetImportState();
 		isImportModalOpen = true;
 	}
@@ -622,6 +693,10 @@
 	}
 
 	function openAvatarImportModal() {
+		if (!canImportAvatars) {
+			toastError('Bạn không có quyền import avatar trong CLB đang làm việc.');
+			return;
+		}
 		resetAvatarImportState();
 		isAvatarImportModalOpen = true;
 	}
@@ -639,6 +714,10 @@
 
 	function startEdit(student: Student) {
 		if (student.deletedAt) return;
+		if (!canEditStudent(student)) {
+			toastError('Bạn không có quyền cập nhật võ sinh này.');
+			return;
+		}
 		errors = {};
 		editingId = student.id;
 		form = {
@@ -746,6 +825,10 @@
 
 	async function handleDelete(studentId: string) {
 		try {
+			const targetStudent = students.find((student) => student.id === studentId);
+			if (!targetStudent || !canDeleteStudent(targetStudent)) {
+				throw new Error('Bạn không có quyền xóa võ sinh này.');
+			}
 			await studentUseCases.softDelete(studentId);
 			toastSuccess('Đã xóa võ sinh.');
 			if (editingId === studentId) resetForm();
@@ -758,6 +841,10 @@
 
 	async function handleRestore(studentId: string) {
 		try {
+			const targetStudent = students.find((student) => student.id === studentId);
+			if (!targetStudent || !canDeleteStudent(targetStudent)) {
+				throw new Error('Bạn không có quyền khôi phục võ sinh này.');
+			}
 			await studentUseCases.restore(studentId);
 			toastSuccess('Đã khôi phục võ sinh cục bộ.');
 			await loadData();
@@ -902,10 +989,11 @@
 			const formData = new FormData();
 			formData.append('file', importFile);
 
-			const response = await fetch(`${getApiBaseUrl()}/api/v1/students/import`, {
-				method: 'POST',
-				body: formData
-			});
+				const response = await fetch(`${getApiBaseUrl()}/api/v1/students/import`, {
+					method: 'POST',
+					headers: withAuthHeaders(),
+					body: formData
+				});
 
 			const payload = (await response.json()) as StudentImportResponse | { error?: string };
 			if (!response.ok) {
@@ -941,14 +1029,27 @@
 		}
 	}
 
-	function downloadImportTemplate() {
-		const url = `${getApiBaseUrl()}/api/v1/students/import-template`;
-		const link = document.createElement('a');
-		link.href = url;
-		link.download = 'students-import-template.xlsx';
-		document.body.appendChild(link);
-		link.click();
-		link.remove();
+	async function downloadImportTemplate() {
+		try {
+			const response = await fetch(`${getApiBaseUrl()}/api/v1/students/import-template`, {
+				headers: withAuthHeaders()
+			});
+			if (!response.ok) {
+				throw new Error('Không thể tải file mẫu import.');
+			}
+
+			const blob = await response.blob();
+			const objectUrl = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = objectUrl;
+			link.download = 'students-import-template.xlsx';
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(objectUrl);
+		} catch (error) {
+			toastError(error instanceof Error ? error.message : 'Không thể tải file mẫu import.');
+		}
 	}
 
 	function handleAvatarImportFileChange(event: Event) {
@@ -1254,12 +1355,14 @@
 				icon="icon-[mdi--file-import-outline]"
 				label="Import võ sinh"
 				onclick={openImportModal}
+				disabled={!canImportStudents}
 				tooltipText={{ text: 'Import võ sinh', placement: 'bottom' }}
 			/>
 			<IconActionButton
 				icon="icon-[mdi--image-multiple-outline]"
 				label="Nhập avatar"
 				onclick={openAvatarImportModal}
+				disabled={!canImportAvatars}
 				tooltipText={{ text: 'Nhập avatar', placement: 'bottom' }}
 			/>
 			<IconActionButton
@@ -1267,6 +1370,7 @@
 				label="Thêm võ sinh"
 				variant="primary"
 				onclick={openCreateModal}
+				disabled={!canCreateStudent}
 				tooltipText={{ text: 'Thêm võ sinh', placement: 'bottom' }}
 			/>
 		{/snippet}
@@ -1276,12 +1380,14 @@
 			searchPlaceholder="Tìm theo võ sinh, CLB, cấp đai"
 		>
 			{#snippet filters()}
-				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedClubId}>
-					<option value="">Tất cả CLB</option>
-					{#each clubs as club (club.id)}
-						<option value={club.id}>{club.name}</option>
-					{/each}
-				</select>
+				{#if isSystemAdmin}
+					<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedClubId}>
+						<option value="">Tất cả CLB</option>
+						{#each clubs as club (club.id)}
+							<option value={club.id}>{club.name}</option>
+						{/each}
+					</select>
+				{/if}
 				<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedGroupId}>
 					<option value="">Tất cả nhóm</option>
 					{#each clubGroups.filter((group) => !selectedClubId || group.clubId === selectedClubId) as group (group.id)}
@@ -1334,7 +1440,7 @@
 						class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
 						type="button"
 						onclick={openBulkActionModal}
-						disabled={selectedStudentCount === 0}
+						disabled={selectedStudentCount === 0 || !canBulkEditSelectedStudents}
 					>
 						Cập nhật hàng loạt
 					</button>
@@ -1412,6 +1518,7 @@
 									<IconActionButton
 										icon="icon-[mdi--restore]"
 										label={`Khôi phục ${student.fullName}`}
+										disabled={!canDeleteStudent(student)}
 										onclick={(event) => {
 											event.stopPropagation();
 											void handleRestore(student.id);
@@ -1489,6 +1596,7 @@
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
 										label={`Sửa ${student.fullName}`}
+										disabled={!canEditStudent(student)}
 										onclick={(event) => {
 											event.stopPropagation();
 											startEdit(student);
@@ -1498,6 +1606,7 @@
 										icon="icon-[mdi--delete-outline]"
 										label={`Xóa ${student.fullName}`}
 										variant="danger"
+										disabled={!canDeleteStudent(student)}
 										onclick={(event) => {
 											event.stopPropagation();
 											void handleDelete(student.id);
@@ -1595,6 +1704,7 @@
 											<IconActionButton
 												icon="icon-[mdi--restore]"
 												label={`Khôi phục ${student.fullName}`}
+												disabled={!canDeleteStudent(student)}
 												onclick={(event) => {
 													event.stopPropagation();
 													void handleRestore(student.id);
@@ -1604,6 +1714,7 @@
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
 												label={`Sửa ${student.fullName}`}
+												disabled={!canEditStudent(student)}
 												onclick={(event) => {
 													event.stopPropagation();
 													startEdit(student);
@@ -1613,6 +1724,7 @@
 												icon="icon-[mdi--delete-outline]"
 												label={`Xóa ${student.fullName}`}
 												variant="danger"
+												disabled={!canDeleteStudent(student)}
 												onclick={(event) => {
 													event.stopPropagation();
 													void handleDelete(student.id);
@@ -2054,7 +2166,9 @@
 					<option value="schedule">Cập nhật lịch học</option>
 					<option value="status">Cập nhật trạng thái</option>
 					<option value="group">Cập nhật nhóm</option>
-					<option value="club">Cập nhật CLB</option>
+					{#if isSystemAdmin}
+						<option value="club">Cập nhật CLB</option>
+					{/if}
 				</select>
 			</div>
 
@@ -2221,8 +2335,10 @@
 	submitLabel={editingId ? 'Cập nhật võ sinh' : 'Tạo võ sinh'}
 	{isSubmitting}
 	showScheduleSection={true}
-	showClubSelector={true}
+	showClubSelector={isSystemAdmin}
+	clubReadonlyName={!isSystemAdmin ? (clubMap.get(form.clubId) ?? '') : ''}
 	showStatusField={!!editingId}
 	studentCodeDisplay={editingId ? form.studentCode || 'Tạo khi đồng bộ' : 'Tạo khi đồng bộ'}
 	statusOptions={[...statusOptions]}
+	canManageAvatars={editingStudent ? canManageStudentMedia(editingStudent) : false}
 />

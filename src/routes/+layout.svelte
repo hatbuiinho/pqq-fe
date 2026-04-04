@@ -1,11 +1,21 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
 		AppModal,
 		avatarUploadManager,
+		authSession,
+		clearAuthSession,
+		ensureClubPermissions,
 		getDB,
+		loadAuthSession,
+		logout,
+		resetSyncStatus,
+		refreshAuthSession,
+		setActiveClubId,
+		type AuthSession,
 		syncManager,
 		syncStatus,
 		subscribeDataChanged
@@ -38,7 +48,7 @@
 			title: string;
 			detail?: string;
 			syncError?: string;
-			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance';
+			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users';
 		}>
 	>([]);
 	let { children } = $props();
@@ -51,9 +61,16 @@
 		lastSyncAt: undefined as string | undefined,
 		lastError: undefined as string | undefined
 	});
+	let currentAuthSession = $state<AuthSession | null>(null);
+	let isAuthReady = $state(false);
+	let managersStarted = $state(false);
+	let profilePopoverOpen = $state(false);
+	let profilePopoverElement = $state<HTMLElement | null>(null);
+	let hydratedSessionToken = $state<string | null>(null);
+	let isHydratingSessionData = $state(false);
 
 	const navItems: Array<{
-		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance';
+		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users';
 		label: string;
 		icon: string;
 		accent: string;
@@ -87,8 +104,35 @@
 			label: 'Điểm danh',
 			icon: 'icon-[mdi--clipboard-check-outline]',
 			accent: 'from-[#7bc3c6] to-[#4d7ca6]'
+		},
+		{
+			href: '/users',
+			label: 'Người dùng',
+			icon: 'icon-[mdi--account-cog-outline]',
+			accent: 'from-[#73b8bf] to-[#4f7ea3]'
 		}
 	];
+	const publicStudentDetailPattern = /^\/students\/[^/]+$/;
+	const pathname = $derived(page.url.pathname);
+	const isPublicRoute = $derived(
+		pathname === '/login' || publicStudentDetailPattern.test(pathname)
+	);
+	const showAppChrome = $derived(isAuthReady && !!currentAuthSession && !isPublicRoute);
+	const isSystemAdmin = $derived(currentAuthSession?.user.systemRole === 'sys_admin');
+	const canManageAdminAreas = $derived(isSystemAdmin);
+	const visibleNavItems = $derived.by(() =>
+		navItems.filter((item) => {
+			if (item.href === '/clubs' || item.href === '/belt-ranks' || item.href === '/users') {
+				return canManageAdminAreas;
+			}
+			return true;
+		})
+	);
+	const activeClubMembership = $derived(
+		currentAuthSession?.memberships.find(
+			(membership) => membership.clubId === currentAuthSession?.activeClubId
+		) ?? currentAuthSession?.memberships[0]
+	);
 
 	function toggleSidebar() {
 		sidebarOpen = !sidebarOpen;
@@ -96,6 +140,40 @@
 
 	function closeSidebar() {
 		sidebarOpen = false;
+	}
+
+	function toggleProfilePopover() {
+		profilePopoverOpen = !profilePopoverOpen;
+	}
+
+	function closeProfilePopover() {
+		profilePopoverOpen = false;
+	}
+
+	function getUserInitials(fullName: string | undefined): string {
+		const normalized = fullName?.trim() ?? '';
+		if (!normalized) return 'U';
+
+		const parts = normalized.split(/\s+/).filter(Boolean);
+		return parts
+			.slice(0, 2)
+			.map((part) => part.charAt(0).toUpperCase())
+			.join('');
+	}
+
+	function startManagers() {
+		if (managersStarted) return;
+		syncManager.start();
+		avatarUploadManager.start();
+		managersStarted = true;
+	}
+
+	function stopManagers() {
+		if (!managersStarted) return;
+		avatarUploadManager.stop();
+		syncManager.stop();
+		resetSyncStatus();
+		managersStarted = false;
 	}
 
 	function getSyncBadgeClass(): string {
@@ -230,9 +308,11 @@
 	}
 
 	onMount(() => {
-		syncManager.start();
-		avatarUploadManager.start();
+		loadAuthSession();
 
+		const unsubscribeAuth = authSession.subscribe((value) => {
+			currentAuthSession = value;
+		});
 		const unsubscribe = syncStatus.subscribe((value) => {
 			syncSnapshot = value;
 		});
@@ -240,13 +320,100 @@
 			if (!syncIssuesOpen) return;
 			void loadSyncIssues();
 		});
+		const handleDocumentPointerDown = (event: PointerEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (profilePopoverElement?.contains(target)) return;
+			closeProfilePopover();
+		};
+		document.addEventListener('pointerdown', handleDocumentPointerDown);
+
+		const initialize = async () => {
+			try {
+				if (currentAuthSession?.token) {
+					await refreshAuthSession();
+				}
+			} catch {
+				clearAuthSession();
+			} finally {
+				isAuthReady = true;
+			}
+		};
+
+		void initialize();
 
 		return () => {
+			document.removeEventListener('pointerdown', handleDocumentPointerDown);
+			unsubscribeAuth();
 			unsubscribe();
 			unsubscribeDataChanged();
-			avatarUploadManager.stop();
-			syncManager.stop();
+			stopManagers();
 		};
+	});
+
+	$effect(() => {
+		if (!isAuthReady) return;
+
+		if (!currentAuthSession && !isPublicRoute) {
+			stopManagers();
+			if (pathname !== '/login') {
+				void goto('/login', { replaceState: true });
+			}
+			return;
+		}
+
+		if (currentAuthSession && pathname === '/login') {
+			void goto('/', { replaceState: true });
+		}
+
+		if (
+			currentAuthSession &&
+			(pathname.startsWith('/clubs') ||
+				pathname.startsWith('/belt-ranks') ||
+				pathname.startsWith('/users')) &&
+			!canManageAdminAreas
+		) {
+			void goto('/', { replaceState: true });
+		}
+	});
+
+	$effect(() => {
+		if (!isAuthReady) return;
+
+		if (currentAuthSession && !isPublicRoute) {
+			startManagers();
+			return;
+		}
+
+		stopManagers();
+	});
+
+	$effect(() => {
+		if (!isAuthReady || isPublicRoute) return;
+		if (!currentAuthSession?.activeClubId) return;
+
+		void ensureClubPermissions(currentAuthSession.activeClubId).catch(() => undefined);
+	});
+
+	$effect(() => {
+		if (!isAuthReady || isPublicRoute) return;
+		if (!currentAuthSession?.token) {
+			hydratedSessionToken = null;
+			isHydratingSessionData = false;
+			return;
+		}
+		if (hydratedSessionToken === currentAuthSession.token) return;
+
+		const targetToken = currentAuthSession.token;
+		hydratedSessionToken = targetToken;
+		isHydratingSessionData = true;
+		sidebarOpen = false;
+		profilePopoverOpen = false;
+		void syncManager.hydrateCurrentSession().finally(() => {
+			if (currentAuthSession?.token === targetToken) {
+				isHydratingSessionData = false;
+			}
+		});
 	});
 </script>
 
@@ -257,174 +424,311 @@
 	<meta name="theme-color" content="#0f172a" />
 </svelte:head>
 
-<div class="h-dvh overflow-hidden">
-	<div class="relative flex h-dvh">
-		{#if sidebarOpen}
-			<button
-				type="button"
-				class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
-				onclick={closeSidebar}
-				aria-label="Close sidebar"
-			></button>
-		{/if}
+{#if !isAuthReady}
+	<div class="flex min-h-dvh items-center justify-center bg-(--app-bg) px-4">
+		<p class="text-sm font-medium text-(--app-muted)">Đang kiểm tra phiên đăng nhập...</p>
+	</div>
+{:else if !showAppChrome}
+	{@render children()}
+{:else}
+	<div class="h-dvh overflow-hidden">
+		<div class="relative flex h-dvh">
+			{#if sidebarOpen}
+				<button
+					type="button"
+					class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[2px] lg:hidden"
+					onclick={closeSidebar}
+					aria-label="Close sidebar"
+				></button>
+			{/if}
 
-		<aside
-			class={`fixed top-0 left-0 z-40 h-dvh w-72 transform border-r border-white/6 bg-[linear-gradient(180deg,var(--app-sidebar-top),var(--app-sidebar-bottom))] text-white shadow-[0_24px_60px_rgba(0,0,0,0.42)] transition-transform duration-300 lg:static lg:h-dvh lg:translate-x-0 ${
-				sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-			}`}
-		>
-			<div class="flex h-full min-h-0 flex-col">
-				<div class="relative border-b border-white/10 px-5 py-5">
-					<h1 class="relative mt-2 text-xl font-bold tracking-tight text-white">
-						Phật Quang Quyền
-					</h1>
-				</div>
+			<aside
+				class={`fixed top-0 left-0 z-40 h-dvh w-72 transform border-r border-white/6 bg-[linear-gradient(180deg,var(--app-sidebar-top),var(--app-sidebar-bottom))] text-white shadow-[0_24px_60px_rgba(0,0,0,0.42)] transition-transform duration-300 lg:static lg:h-dvh lg:translate-x-0 ${
+					sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+				}`}
+			>
+				<div class="flex h-full min-h-0 flex-col">
+					<div class="relative border-b border-white/10 px-5 py-5">
+						<h1 class="relative mt-2 text-xl font-bold tracking-tight text-white">
+							Phật Quang Quyền
+						</h1>
+					</div>
 
-				<div class="min-h-0 flex-1 overflow-y-auto">
-					<nav class="space-y-2 p-3">
-						<p class="px-3 pt-2 text-[11px] font-semibold tracking-[0.18em] text-white/38 uppercase">
-							Khu Vực Làm Việc
-						</p>
-						{#each navItems as item (item.href)}
-							{@const isActive =
-								page.url.pathname === item.href ||
-								(item.href !== '/' && page.url.pathname.startsWith(item.href))}
-							<a
-								href={resolve(item.href)}
-								class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
-									isActive
-										? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-										: 'text-white/68 hover:bg-white/6 hover:text-white'
-								}`}
-								onclick={closeSidebar}
+					<div class="min-h-0 flex-1 overflow-y-auto">
+						<nav class="space-y-2 p-3">
+							<p
+								class="px-3 pt-2 text-[11px] font-semibold tracking-[0.18em] text-white/38 uppercase"
 							>
-								<span
-									class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
-								></span>
-								<span
-									class={`inline-flex size-10 items-center justify-center rounded-xl border transition ${
+								Khu Vực Làm Việc
+							</p>
+							{#each visibleNavItems as item (item.href)}
+								{@const isActive =
+									page.url.pathname === item.href ||
+									(item.href !== '/' && page.url.pathname.startsWith(item.href))}
+								<a
+									href={resolve(item.href)}
+									class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
 										isActive
-											? 'border-white/10 bg-white/8 text-white'
-											: 'border-white/6 bg-slate-950/10 text-white/72 group-hover:border-white/10 group-hover:bg-white/6'
+											? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
+											: 'text-white/68 hover:bg-white/6 hover:text-white'
 									}`}
+									onclick={closeSidebar}
 								>
-									<span class={`${item.icon} size-5`}></span>
-								</span>
-								<span class="flex-1">{item.label}</span>
-								{#if isActive}
 									<span
-										class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
+										class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
 									></span>
-								{/if}
-							</a>
-						{/each}
-					</nav>
-
-					<div class="border-t border-white/10 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-						<div class="space-y-4 rounded-2xl bg-white/6 p-4">
-							<div class="flex items-center justify-between gap-3">
-								<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">
-									Đồng Bộ
-								</p>
-								<span
-									class={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getSyncBadgeClass()}`}
-								>
-									{getSyncLabel()}
-								</span>
-							</div>
-
-							<div class="grid grid-cols-2 gap-2 text-sm">
-								<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-									<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Đang Chờ</p>
-									<p class="mt-1 font-semibold text-white">{syncSnapshot.pendingCount}</p>
-								</div>
-								<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
-									<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Lỗi</p>
-									<div class="mt-1 flex items-center justify-between gap-2">
-										<p class="font-semibold text-white">{syncSnapshot.failedCount}</p>
-										{#if syncSnapshot.failedCount > 0}
-											<button
-												type="button"
-												class="text-[11px] font-medium text-red-200 transition hover:text-white"
-												onclick={openSyncIssues}
-											>
-												Xem
-											</button>
-										{/if}
-									</div>
-								</div>
-							</div>
-
-							<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
-								<div class="flex items-center justify-between gap-3">
-									<span class="text-white/48">Lần đồng bộ gần nhất</span>
-									<span class="text-right text-white/80"
-										>{formatLastSync(syncSnapshot.lastSyncAt)}</span
+									<span
+										class={`inline-flex size-10 items-center justify-center rounded-xl border transition ${
+											isActive
+												? 'border-white/10 bg-white/8 text-white'
+												: 'border-white/6 bg-slate-950/10 text-white/72 group-hover:border-white/10 group-hover:bg-white/6'
+										}`}
 									>
-								</div>
-								{#if syncSnapshot.lastError}
-									<div class="mt-3 border-t border-white/8 pt-3">
-										<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">
-											Lỗi gần nhất
-										</p>
-										<p class="mt-1 line-clamp-2 text-sm text-red-100/90">
-											{syncSnapshot.lastError}
-										</p>
-									</div>
-								{/if}
-							</div>
+										<span class={`${item.icon} size-5`}></span>
+									</span>
+									<span class="flex-1">{item.label}</span>
+									{#if isActive}
+										<span
+											class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
+										></span>
+									{/if}
+								</a>
+							{/each}
+						</nav>
 
-							<div class="grid grid-cols-2 gap-2">
-								<button
-									type="button"
-									class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
-									onclick={() => void syncManager.rebaseFromServer()}
-								>
-									<span class="icon-[mdi--database-sync-outline] size-4"></span>
-									<span>Tải lại</span>
-								</button>
-								<button
-									type="button"
-									class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
-									onclick={() => void syncManager.syncNow()}
-								>
-									<span class="icon-[mdi--sync] size-4"></span>
-									<span>Đồng bộ ngay</span>
-								</button>
+						<div class="border-t border-white/10 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+							<div class="space-y-4 rounded-2xl bg-white/6 p-4">
+								<div class="flex items-center justify-between gap-3">
+									<p class="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">
+										Đồng Bộ
+									</p>
+									<span
+										class={`rounded-full border px-3 py-1 text-[11px] font-semibold ${getSyncBadgeClass()}`}
+									>
+										{getSyncLabel()}
+									</span>
+								</div>
+
+								<div class="grid grid-cols-2 gap-2 text-sm">
+									<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
+										<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Đang Chờ</p>
+										<p class="mt-1 font-semibold text-white">{syncSnapshot.pendingCount}</p>
+									</div>
+									<div class="rounded-xl border border-white/10 bg-white/6 px-3 py-2">
+										<p class="text-[11px] tracking-[0.16em] text-white/36 uppercase">Lỗi</p>
+										<div class="mt-1 flex items-center justify-between gap-2">
+											<p class="font-semibold text-white">{syncSnapshot.failedCount}</p>
+											{#if syncSnapshot.failedCount > 0}
+												<button
+													type="button"
+													class="cursor-pointer text-[11px] font-medium text-red-200 transition hover:text-white"
+													onclick={openSyncIssues}
+												>
+													Xem
+												</button>
+											{/if}
+										</div>
+									</div>
+								</div>
+
+								<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
+									<div class="flex items-center justify-between gap-3">
+										<span class="text-white/48">Lần đồng bộ gần nhất</span>
+										<span class="text-right text-white/80"
+											>{formatLastSync(syncSnapshot.lastSyncAt)}</span
+										>
+									</div>
+									{#if syncSnapshot.lastError}
+										<div class="mt-3 border-t border-white/8 pt-3">
+											<p class="text-[11px] tracking-[0.16em] text-red-200/70 uppercase">
+												Lỗi gần nhất
+											</p>
+											<p class="mt-1 line-clamp-2 text-sm text-red-100/90">
+												{syncSnapshot.lastError}
+											</p>
+										</div>
+									{/if}
+								</div>
+
+								<div class="grid grid-cols-2 gap-2">
+									<button
+										type="button"
+										class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
+										onclick={() => void syncManager.rebaseFromServer()}
+									>
+										<span class="icon-[mdi--database-sync-outline] size-4"></span>
+										<span>Tải lại</span>
+									</button>
+									<button
+										type="button"
+										class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/12"
+										onclick={() => void syncManager.syncNow()}
+									>
+										<span class="icon-[mdi--sync] size-4"></span>
+										<span>Đồng bộ ngay</span>
+									</button>
+								</div>
 							</div>
 						</div>
 					</div>
 				</div>
-			</div>
-		</aside>
+			</aside>
 
-		<div class="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-(--app-bg)">
-			<header class="sticky top-0 z-20 px-4 pt-4">
-				<div
-					class="flex min-h-16 items-center gap-3 rounded-[1.35rem] border border-(--app-line) bg-(--app-surface) px-4 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl"
-				>
-					<button
-						type="button"
-						class="inline-flex items-center justify-center rounded-xl border border-(--app-line) bg-white p-2 text-(--app-ink) hover:bg-slate-50 lg:hidden"
-						onclick={toggleSidebar}
-						aria-label="Toggle sidebar"
+			<div class="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-(--app-bg)">
+				<header class="sticky top-0 z-20 px-4 pt-4">
+					<div
+						class="flex min-h-16 items-center justify-between gap-4 rounded-[1.35rem] border border-white/45 bg-linear-to-b from-white/54 to-white/24 px-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)] backdrop-blur-2xl"
 					>
-						<span class="icon-[mdi--menu] size-5"></span>
-					</button>
-					<div class="min-w-0 flex-1">
-						<p class="text-[11px] font-semibold tracking-[0.18em] text-(--app-muted) uppercase">
-							Không gian quản lý
-						</p>
-					</div>
-				</div>
-			</header>
+						<div class="flex min-w-0 flex-1 items-center gap-3">
+							<button
+								type="button"
+								class="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-(--app-line) bg-white p-3 text-(--app-ink) hover:bg-slate-50 lg:hidden"
+								onclick={toggleSidebar}
+								aria-label="Toggle sidebar"
+							>
+								<span class="icon-[mdi--menu] size-5"></span>
+							</button>
+							<div class="min-w-0 flex-1 p-3">
+								<p class="text-[13px] font-semibold tracking-[0.18em] text-(--app-muted) uppercase">
+									Không gian quản lý
+								</p>
+								{#if activeClubMembership}
+									<p class="truncate text-sm font-medium text-(--app-ink)">
+										{activeClubMembership.clubName}
+										<span class="text-(--app-muted)">
+											· {activeClubMembership.clubRole === 'owner' ? 'Chủ nhiệm' : 'Phụ tá'}
+										</span>
+									</p>
+								{/if}
+							</div>
+						</div>
+						{#if currentAuthSession}
+							<div class="relative" bind:this={profilePopoverElement}>
+								<button
+									type="button"
+									class="inline-flex cursor-pointer items-center gap-2 rounded-2xl px-2.5 py-2 text-left transition"
+									onclick={toggleProfilePopover}
+									aria-label="Mở menu hồ sơ"
+									aria-expanded={profilePopoverOpen}
+								>
+									<span
+										class="inline-flex size-10 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white"
+									>
+										{getUserInitials(currentAuthSession.user.fullName)}
+									</span>
+									<span
+										class="hidden max-w-40 truncate text-sm font-semibold text-(--app-ink) sm:block"
+									>
+										{currentAuthSession.user.fullName}
+									</span>
+									<span
+										class={`icon-[mdi--chevron-down] size-5 text-(--app-muted) transition ${profilePopoverOpen ? 'rotate-180' : ''}`}
+									></span>
+								</button>
 
-			<main class="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pt-4 pb-2 sm:px-3">
-				{@render children()}
-			</main>
+								{#if profilePopoverOpen}
+									<div
+										class="absolute top-[calc(100%+0.75rem)] right-1 z-30 w-[min(22rem,calc(100vw-2.75rem))] overflow-hidden rounded-[1.4rem] border border-(--app-line) bg-white p-4 shadow-[0_24px_64px_rgba(15,23,42,0.16)] sm:right-0 sm:w-[22rem]"
+									>
+										<div class="flex items-start gap-3">
+											<span
+												class="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-base font-semibold text-white"
+											>
+												{getUserInitials(currentAuthSession.user.fullName)}
+											</span>
+											<div class="min-w-0 flex-1">
+												<p class="truncate text-sm font-semibold text-(--app-ink)">
+													{currentAuthSession.user.fullName}
+												</p>
+												<p class="truncate text-sm text-(--app-muted)">
+													{currentAuthSession.user.email}
+												</p>
+												<p
+													class="mt-1 text-[11px] font-semibold tracking-[0.16em] text-(--app-muted) uppercase"
+												>
+													{currentAuthSession.user.systemRole === 'sys_admin'
+														? 'Quản trị hệ thống'
+														: 'Người dùng hệ thống'}
+												</p>
+											</div>
+										</div>
+
+										{#if currentAuthSession.memberships.length > 0}
+											<div class="mt-4 space-y-2">
+												<span
+													class="block text-[11px] font-semibold tracking-[0.16em] text-(--app-muted) uppercase"
+												>
+													CLB đang làm việc
+												</span>
+												{#if isSystemAdmin}
+													<select
+														class="w-full rounded-2xl border border-(--app-line) bg-white px-3 py-3 text-sm text-(--app-ink) transition outline-none focus:border-slate-400"
+														value={activeClubMembership?.clubId ?? ''}
+														onchange={(event) => {
+															setActiveClubId(event.currentTarget.value);
+															closeProfilePopover();
+														}}
+													>
+														{#each currentAuthSession.memberships as membership (membership.id)}
+															<option value={membership.clubId}>
+																{membership.clubName} · {membership.clubRole === 'owner'
+																	? 'Chủ nhiệm'
+																	: 'Phụ tá'}
+															</option>
+														{/each}
+													</select>
+												{:else if activeClubMembership}
+													<div
+														class="rounded-2xl border border-(--app-line) bg-slate-50 px-3 py-3 text-sm text-(--app-ink)"
+													>
+														{activeClubMembership.clubName} · {activeClubMembership.clubRole === 'owner'
+															? 'Chủ nhiệm'
+															: 'Phụ tá'}
+													</div>
+												{/if}
+											</div>
+										{/if}
+
+										<div class="mt-4 flex gap-2">
+											<button
+												type="button"
+												class="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+												onclick={() => void logout()}
+											>
+												<span class="icon-[mdi--logout] size-4"></span>
+												<span>Đăng xuất</span>
+											</button>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</header>
+
+				<main class="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pt-4 pb-2 sm:px-3">
+					{#key currentAuthSession?.token}
+						{@render children()}
+					{/key}
+				</main>
+			</div>
 		</div>
 	</div>
-</div>
+{/if}
+
+{#if showAppChrome && isHydratingSessionData}
+	<div class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-white/45 backdrop-blur-[2px]">
+		<div class="rounded-2xl border border-(--app-line) bg-white px-5 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+			<div class="flex items-center gap-3">
+				<span class="icon-[mdi--sync] size-5 animate-spin text-(--app-accent-cyan)"></span>
+				<div>
+					<p class="text-sm font-semibold text-(--app-ink)">Đang tải dữ liệu theo tài khoản mới</p>
+					<p class="text-sm text-(--app-muted)">Ứng dụng đang làm mới dữ liệu cục bộ.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <ToastViewport />
 
