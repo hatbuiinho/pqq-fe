@@ -63,12 +63,12 @@
 		order: number;
 	};
 
-type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
-	attendedStudents: Student[];
-	absentStudents: Student[];
-	excusedStudents: Student[];
-	unmarkedStudents: Student[];
-};
+	type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
+		attendedStudents: Student[];
+		absentStudents: Student[];
+		excusedStudents: Student[];
+		unmarkedStudents: Student[];
+	};
 
 	type SessionFormErrors = Partial<Record<'clubId' | 'sessionDate', string>>;
 
@@ -215,11 +215,26 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
 
-	const clubMap = $derived.by(() => new Map(clubs.map((club) => [club.id, club])));
-	const groupMap = $derived.by(() => new Map(clubGroups.map((group) => [group.id, group.name])));
-	const beltRankMap = $derived.by(
-		() => new Map(beltRanks.map((beltRank) => [beltRank.id, beltRank.name]))
+	const clubMap = $derived.by(() =>
+		Object.fromEntries(clubs.map((club) => [club.id, club])) as Record<string, Club>
 	);
+	const groupMap = $derived.by(() =>
+		Object.fromEntries(clubGroups.map((group) => [group.id, group.name])) as Record<string, string>
+	);
+	const beltRankMap = $derived.by(() =>
+		Object.fromEntries(beltRanks.map((beltRank) => [beltRank.id, beltRank.name])) as Record<
+			string,
+			string
+		>
+	);
+	const beltRankInfoMap = $derived.by(() => {
+		const map: Record<string, { name: string; order: number }> = {};
+		for (const beltRank of beltRanks) {
+			if (beltRank.deletedAt) continue;
+			map[beltRank.id] = { name: beltRank.name, order: beltRank.order };
+		}
+		return map;
+	});
 	const availableClubs = $derived.by(() =>
 		clubs.filter((club) => !club.deletedAt && club.isActive && club.syncStatus === 'synced')
 	);
@@ -265,7 +280,7 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 		if (!query && !dateFilter) return sessions;
 
 		return sessions.filter((sessionItem) => {
-			const clubName = clubMap.get(sessionItem.clubId)?.name ?? '';
+			const clubName = clubMap[sessionItem.clubId]?.name ?? '';
 			const matchesQuery =
 				!query ||
 				normalizeSearchText(clubName).includes(query) ||
@@ -277,7 +292,7 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 	const filteredItems = $derived.by(() => {
 		const query = normalizeSearchText(studentSearch);
 		return items.filter(({ student, record }) => {
-			const groupName = groupMap.get(student.groupId ?? '') ?? '';
+			const groupName = groupMap[student.groupId ?? ''] ?? '';
 			const matchesQuery =
 				!query ||
 				normalizeSearchText(student.fullName).includes(query) ||
@@ -366,39 +381,14 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 			ratio: totalCount > 0 ? (attendedCount / totalCount) * 100 : 0
 		};
 	});
-	const beltRankAttendanceSummary = $derived.by<BeltRankAttendanceSummaryItem[]>(() => {
-		const map = new Map<string, BeltRankAttendanceSummaryItem>();
-		for (const item of items) {
-			const beltRankId = item.student.beltRankId || 'unknown';
-			const beltRankName = beltRankMap.get(item.student.beltRankId) ?? 'Không xác định';
-			const beltRankOrder =
-				beltRanks.find((beltRank) => beltRank.id === item.student.beltRankId)?.order ?? 9999;
-			const current = map.get(beltRankId) ?? {
-				beltRankId,
-				label: beltRankName,
-				attendedCount: 0,
-				totalCount: 0,
-				order: beltRankOrder
-			};
-			current.totalCount += 1;
-			if (isAttendedStatus(item.record.attendanceStatus)) {
-				current.attendedCount += 1;
-			}
-			map.set(beltRankId, current);
-		}
-		return [...map.values()].sort((left, right) => {
-			if (left.order !== right.order) return left.order - right.order;
-			return left.label.localeCompare(right.label);
-		});
-	});
 	const beltRankAttendanceDetails = $derived.by<BeltRankAttendanceDetailItem[]>(() => {
-		const map = new Map<string, BeltRankAttendanceDetailItem>();
+		const map: Record<string, BeltRankAttendanceDetailItem> = {};
 		for (const item of items) {
 			const beltRankId = item.student.beltRankId || 'unknown';
-			const beltRankName = beltRankMap.get(item.student.beltRankId) ?? 'Không xác định';
-			const beltRankOrder =
-				beltRanks.find((beltRank) => beltRank.id === item.student.beltRankId)?.order ?? 9999;
-			const current = map.get(beltRankId) ?? {
+			const beltRankInfo = beltRankInfoMap[item.student.beltRankId ?? ''];
+			const beltRankName = beltRankInfo?.name ?? 'Không xác định';
+			const beltRankOrder = beltRankInfo?.order ?? 9999;
+			const current = map[beltRankId] ?? {
 				beltRankId,
 				label: beltRankName,
 				attendedCount: 0,
@@ -420,9 +410,9 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 			} else if (item.record.attendanceStatus === 'unmarked') {
 				current.unmarkedStudents.push(item.student);
 			}
-			map.set(beltRankId, current);
+			map[beltRankId] = current;
 		}
-		return [...map.values()]
+		return Object.values(map)
 			.map((entry) => ({
 				...entry,
 				attendedStudents: [...entry.attendedStudents].sort((left, right) =>
@@ -1325,7 +1315,7 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 					{:else}
 						<div class="space-y-3">
 							{#each filteredSessions as sessionItem (sessionItem.id)}
-								{@const club = clubMap.get(sessionItem.clubId)}
+								{@const club = clubMap[sessionItem.clubId]}
 								{@const sessionStats = sessionStatsMap[sessionItem.id]}
 								<button
 									type="button"
@@ -1668,9 +1658,9 @@ type BeltRankAttendanceDetailItem = BeltRankAttendanceSummaryItem & {
 												</div>
 												<p class="mt-1 text-sm text-slate-500">
 													{#if item.student.groupId}
-														{groupMap.get(item.student.groupId) ?? 'Nhóm không xác định'} •
+														{groupMap[item.student.groupId ?? ''] ?? 'Nhóm không xác định'} •
 													{/if}
-													{beltRankMap.get(item.student.beltRankId) ?? 'Cấp đai không xác định'}
+													{beltRankMap[item.student.beltRankId] ?? 'Cấp đai không xác định'}
 												</p>
 												{#if item.record.notes}
 													<p class="mt-2 line-clamp-2 text-sm text-slate-600">
