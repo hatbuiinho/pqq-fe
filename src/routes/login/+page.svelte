@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { authSession, login } from '$lib';
 	import { get } from 'svelte/store';
 
@@ -17,7 +18,7 @@
 			await login(email, password);
 			const session = get(authSession);
 			const target = session?.memberships.length ? '/' : '/';
-			await goto(target);
+			await goto(resolve(target));
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Đăng nhập thất bại.';
 		} finally {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	let { data } = $props();
 
 	function formatDate(value?: string): string {
@@ -12,6 +13,15 @@
 		if (value === 'male') return 'Nam';
 		if (value === 'female') return 'Nữ';
 		return '-';
+	}
+
+	function openStudentPopup() {
+		const href = `${resolve('/students')}${
+			data.profile.studentCode
+				? `?studentCode=${encodeURIComponent(data.profile.studentCode)}&open=1`
+				: `?studentId=${encodeURIComponent(data.profile.id)}&open=1`
+		}`;
+		window.location.assign(href);
 	}
 </script>
 
@@ -45,19 +55,16 @@
 				<p class="mt-1 text-sm text-slate-600">{data.profile.studentCode ?? 'Chưa có mã số'}</p>
 			</div>
 			<div class="flex items-center gap-2">
-					<a
+					<button
+						type="button"
 						class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-						href={
-							data.profile.studentCode
-								? `/students?studentCode=${encodeURIComponent(data.profile.studentCode)}&open=1`
-								: `/students?studentId=${encodeURIComponent(data.profile.id)}&open=1`
-						}
+						onclick={openStudentPopup}
 					>
 						Mở popup chỉnh sửa
-					</a>
+					</button>
 				<a
 					class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white"
-					href="/students"
+					href={resolve('/students')}
 				>
 					Danh sách võ sinh
 				</a>

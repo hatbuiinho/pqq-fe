@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { onMount } from 'svelte';
 	import { replaceState } from '$app/navigation';
 	import {
-		AppDatePicker,
 		DataTableToolbar,
 		EmptyState,
 		ImagePreviewModal,
@@ -177,13 +178,13 @@
 	let shouldAutoOpenStudent = $state(false);
 	let hasHandledDeepLinkOpen = $state(false);
 
-	const clubMap = $derived.by(() => new Map(clubs.map((club) => [club.id, club.name])));
-	const groupMap = $derived.by(() => new Map(clubGroups.map((group) => [group.id, group.name])));
+	const clubMap = $derived.by(() => new SvelteMap(clubs.map((club) => [club.id, club.name])));
+	const groupMap = $derived.by(() => new SvelteMap(clubGroups.map((group) => [group.id, group.name])));
 	const beltRankMap = $derived.by(
-		() => new Map(beltRanks.map((beltRank) => [beltRank.id, beltRank.name]))
+		() => new SvelteMap(beltRanks.map((beltRank) => [beltRank.id, beltRank.name]))
 	);
 	const clubScheduleMap = $derived.by(() => {
-		const map = new Map<string, Weekday[]>();
+		const map = new SvelteMap<string, Weekday[]>();
 		for (const schedule of clubSchedules) {
 			if (schedule.deletedAt || !schedule.isActive) continue;
 			const existing = map.get(schedule.clubId) ?? [];
@@ -196,10 +197,10 @@
 		return map;
 	});
 	const studentScheduleProfileMap = $derived.by(
-		() => new Map(studentScheduleProfiles.map((profile) => [profile.studentId, profile.mode]))
+		() => new SvelteMap(studentScheduleProfiles.map((profile) => [profile.studentId, profile.mode]))
 	);
 	const studentScheduleMap = $derived.by(() => {
-		const map = new Map<string, Weekday[]>();
+		const map = new SvelteMap<string, Weekday[]>();
 		for (const schedule of studentSchedules) {
 			if (schedule.deletedAt || !schedule.isActive) continue;
 			const existing = map.get(schedule.studentId) ?? [];
@@ -318,7 +319,7 @@
 			selectableFilteredStudents.every((student) => selectedStudentIds.includes(student.id))
 	);
 	const selectedStudentClubIds = $derived.by(() => [
-		...new Set(selectedStudents.map((student) => student.clubId))
+		...new SvelteSet(selectedStudents.map((student) => student.clubId))
 	]);
 	const singleSelectedClubId = $derived.by(() =>
 		selectedStudentClubIds.length === 1 ? selectedStudentClubIds[0] : ''
@@ -334,12 +335,16 @@
 	});
 
 	$effect(() => {
-		search;
-		selectedClubId;
-		selectedGroupId;
-		selectedBeltRankId;
-		selectedStatus;
-		currentPage = 1;
+		const resetDependencies = [
+			search,
+			selectedClubId,
+			selectedGroupId,
+			selectedBeltRankId,
+			selectedStatus
+		];
+		if (resetDependencies.length >= 0) {
+			currentPage = 1;
+		}
 	});
 
 	$effect(() => {
@@ -356,7 +361,7 @@
 	});
 
 	$effect(() => {
-		const existingIds = new Set(
+		const existingIds = new SvelteSet(
 			students.filter((student) => !student.deletedAt).map((student) => student.id)
 		);
 		const nextSelectedIds = selectedStudentIds.filter((id) => existingIds.has(id));
@@ -388,7 +393,7 @@
 			bulkScheduleMode === 'custom' &&
 			bulkScheduleDays.length > 0
 		) {
-			const allowedDays = new Set(bulkScheduleAvailableDays);
+			const allowedDays = new SvelteSet(bulkScheduleAvailableDays);
 			const nextDays = bulkScheduleDays.filter((weekday) => allowedDays.has(weekday));
 			if (!areWeekdayListsEqual(bulkScheduleDays, nextDays)) {
 				bulkScheduleDays = nextDays;
@@ -419,7 +424,7 @@
 
 	$effect(() => {
 		if (form.scheduleMode === 'custom' && selectedCustomScheduleDays.length > 0) {
-			const available = new Set(availableClubTrainingDays);
+			const available = new SvelteSet(availableClubTrainingDays);
 			const nextSelectedDays = selectedCustomScheduleDays.filter((weekday) =>
 				available.has(weekday)
 			);
@@ -435,7 +440,8 @@
 	});
 
 	$effect(() => {
-		paginatedStudents;
+		const visibleRows = paginatedStudents;
+		void visibleRows;
 		void refreshVisibleAvatarPreviews();
 	});
 
@@ -519,11 +525,7 @@
 	}
 
 	function clearDeepLinkQueryParams() {
-		const url = new URL(window.location.href);
-		url.searchParams.delete('studentCode');
-		url.searchParams.delete('studentId');
-		url.searchParams.delete('open');
-		replaceState(`${url.pathname}${url.search}${url.hash}`, {});
+		replaceState(resolve('/students'), {});
 	}
 
 	function applyDeepLinkOpen() {
@@ -610,7 +612,7 @@
 			return;
 		}
 
-		const nextIds = new Set(selectedStudentIds);
+		const nextIds = new SvelteSet(selectedStudentIds);
 		for (const student of selectableFilteredStudents) {
 			nextIds.add(student.id);
 		}
@@ -706,7 +708,7 @@
 		resetAvatarImportState();
 	}
 
-	function getStudentDetailHref(student: Student): string {
+	function getStudentDetailHref(student: Student): `/students/${string}` | '' {
 		const code = (student.studentCode ?? '').trim();
 		if (!code) return '';
 		return `/students/${encodeURIComponent(code)}`;
@@ -803,18 +805,6 @@
 		}
 	}
 
-	function toggleCustomScheduleDay(weekday: Weekday) {
-		const allowedDays = new Set(availableClubTrainingDays);
-		if (!allowedDays.has(weekday)) return;
-
-		if (selectedCustomScheduleDays.includes(weekday)) {
-			selectedCustomScheduleDays = selectedCustomScheduleDays.filter((value) => value !== weekday);
-			return;
-		}
-
-		selectedCustomScheduleDays = sortWeekdays([...selectedCustomScheduleDays, weekday]);
-	}
-
 	function getStudentScheduleSummary(studentId: string, clubId: string): string {
 		const mode = studentScheduleProfileMap.get(studentId) ?? 'inherit';
 		if (mode === 'inherit') {
@@ -855,7 +845,7 @@
 	}
 
 	function toggleBulkScheduleDay(weekday: Weekday) {
-		const allowedDays = new Set(bulkScheduleAvailableDays);
+		const allowedDays = new SvelteSet(bulkScheduleAvailableDays);
 		if (!allowedDays.has(weekday)) return;
 
 		if (bulkScheduleDays.includes(weekday)) {
@@ -1478,7 +1468,9 @@
 									{#if getStudentDetailHref(student)}
 										<a
 											class="min-w-0 truncate font-semibold text-slate-900 hover:text-slate-700 hover:underline"
-											href={getStudentDetailHref(student)}
+											href={resolve('/students/[studentCode]', {
+												studentCode: student.studentCode ?? ''
+											})}
 											onclick={(event) => event.stopPropagation()}
 										>
 											{student.fullName}
@@ -1558,7 +1550,9 @@
 									{#if getStudentDetailHref(student)}
 										<a
 											class="min-w-0 truncate font-semibold text-slate-900 hover:text-slate-700 hover:underline"
-											href={getStudentDetailHref(student)}
+											href={resolve('/students/[studentCode]', {
+												studentCode: student.studentCode ?? ''
+											})}
 											onclick={(event) => event.stopPropagation()}
 										>
 											{student.fullName}
@@ -1668,7 +1662,9 @@
 										{#if getStudentDetailHref(student)}
 											<a
 												class="font-medium text-slate-900 hover:text-slate-700 hover:underline"
-												href={getStudentDetailHref(student)}
+												href={resolve('/students/[studentCode]', {
+													studentCode: student.studentCode ?? ''
+												})}
 												onclick={(event) => event.stopPropagation()}
 											>
 												{student.fullName}

@@ -32,18 +32,6 @@ const POLL_INTERVAL_MS = 15000;
 const RECONNECT_DELAY_MS = 2000;
 const ATTENDANCE_SYNC_DELAY_MS = 1500;
 
-type SyncRecordMap = {
-	clubs: Club;
-	club_groups: ClubGroup;
-	club_schedules: ClubSchedule;
-	belt_ranks: BeltRank;
-	students: Student;
-	student_schedule_profiles: StudentScheduleProfile;
-	student_schedules: StudentSchedule;
-	attendance_sessions: AttendanceSession;
-	attendance_records: AttendanceRecord;
-};
-
 class SyncManager {
 	private readonly apiClient = new HttpSyncApiClient(getApiBaseUrl());
 	private realtimeClient: WebSocketSyncClient | null = null;

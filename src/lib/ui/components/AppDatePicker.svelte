@@ -75,11 +75,6 @@
 		}
 	}
 
-	function createDateFromAge(age: number): Date {
-		const now = new Date();
-		return new Date(now.getFullYear() - age, now.getMonth(), now.getDate(), 12, 0, 0);
-	}
-
 	function createDateFromYear(year: number): Date {
 		const base = normalizeDate(startDate) ?? new Date();
 		return new Date(year, base.getMonth(), base.getDate(), 12, 0, 0);

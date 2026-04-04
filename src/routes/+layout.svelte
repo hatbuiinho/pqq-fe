@@ -357,13 +357,13 @@
 		if (!currentAuthSession && !isPublicRoute) {
 			stopManagers();
 			if (pathname !== '/login') {
-				void goto('/login', { replaceState: true });
+				void goto(resolve('/login'), { replaceState: true });
 			}
 			return;
 		}
 
 		if (currentAuthSession && pathname === '/login') {
-			void goto('/', { replaceState: true });
+			void goto(resolve('/'), { replaceState: true });
 		}
 
 		if (
@@ -373,7 +373,7 @@
 				pathname.startsWith('/users')) &&
 			!canManageAdminAreas
 		) {
-			void goto('/', { replaceState: true });
+			void goto(resolve('/'), { replaceState: true });
 		}
 	});
 
@@ -628,7 +628,7 @@
 
 								{#if profilePopoverOpen}
 									<div
-										class="absolute top-[calc(100%+0.75rem)] right-1 z-30 w-[min(22rem,calc(100vw-2.75rem))] overflow-hidden rounded-[1.4rem] border border-(--app-line) bg-white p-4 shadow-[0_24px_64px_rgba(15,23,42,0.16)] sm:right-0 sm:w-[22rem]"
+										class="absolute top-[calc(100%+0.75rem)] right-1 z-30 w-[min(22rem,calc(100vw-2.75rem))] overflow-hidden rounded-[1.4rem] border border-(--app-line) bg-white p-4 shadow-[0_24px_64px_rgba(15,23,42,0.16)] sm:right-0 sm:w-88"
 									>
 										<div class="flex items-start gap-3">
 											<span
@@ -681,7 +681,8 @@
 													<div
 														class="rounded-2xl border border-(--app-line) bg-slate-50 px-3 py-3 text-sm text-(--app-ink)"
 													>
-														{activeClubMembership.clubName} · {activeClubMembership.clubRole === 'owner'
+														{activeClubMembership.clubName} · {activeClubMembership.clubRole ===
+														'owner'
 															? 'Chủ nhiệm'
 															: 'Phụ tá'}
 													</div>
@@ -717,8 +718,12 @@
 {/if}
 
 {#if showAppChrome && isHydratingSessionData}
-	<div class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-white/45 backdrop-blur-[2px]">
-		<div class="rounded-2xl border border-(--app-line) bg-white px-5 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+	<div
+		class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-white/45 backdrop-blur-[2px]"
+	>
+		<div
+			class="rounded-2xl border border-(--app-line) bg-white px-5 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.12)]"
+		>
 			<div class="flex items-center gap-3">
 				<span class="icon-[mdi--sync] size-5 animate-spin text-(--app-accent-cyan)"></span>
 				<div>

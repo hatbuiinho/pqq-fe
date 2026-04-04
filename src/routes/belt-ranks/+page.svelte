@@ -98,8 +98,10 @@
 	});
 
 	$effect(() => {
-		search;
-		currentPage = 1;
+		const resetKey = search;
+		if (resetKey !== undefined) {
+			currentPage = 1;
+		}
 	});
 
 	$effect(() => {

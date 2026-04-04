@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import { SvelteDate, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { onMount } from 'svelte';
 	import { AppModal, EmptyState, PageHeader, SectionCard, subscribeDataChanged, tooltip } from '$lib';
 	import type {
@@ -119,15 +121,15 @@
 	}
 
 	function parseIsoDate(value: string): Date {
-		return new Date(`${value}T00:00:00`);
+		return new SvelteDate(`${value}T00:00:00`);
 	}
 
 	function getTodayIso(): string {
-		return toIsoDate(new Date());
+		return toIsoDate(new SvelteDate());
 	}
 
 	function getRangeStartIso(days: RangeDays): string {
-		const date = new Date();
+		const date = new SvelteDate();
 		date.setDate(date.getDate() - days + 1);
 		return toIsoDate(date);
 	}
@@ -161,6 +163,15 @@
 
 	function closeQuickProfileModal() {
 		isQuickProfileModalOpen = false;
+	}
+
+	function openStudentPopup(student: Student) {
+		const href = `${resolve('/students')}${
+			student.studentCode
+				? `?studentCode=${encodeURIComponent(student.studentCode)}&open=1`
+				: `?studentId=${encodeURIComponent(student.id)}&open=1`
+		}`;
+		window.location.assign(href);
 	}
 
 	function getStatusLabel(status: AttendanceStatus): string {
@@ -219,13 +230,13 @@
 
 	const sessionMap = $derived.by(
 		() =>
-			new Map(
+			new SvelteMap(
 				sessions
 					.filter((session) => !session.deletedAt)
 					.map((session) => [session.id, session])
 			)
 	);
-	const clubMap = $derived.by(() => new Map(clubs.map((club) => [club.id, club])));
+	const clubMap = $derived.by(() => new SvelteMap(clubs.map((club) => [club.id, club])));
 
 	const sessionsInRange = $derived.by(() =>
 		sessions
@@ -238,7 +249,9 @@
 			.sort((a, b) => b.sessionDate.localeCompare(a.sessionDate))
 	);
 
-	const sessionIdSetInRange = $derived.by(() => new Set(sessionsInRange.map((session) => session.id)));
+	const sessionIdSetInRange = $derived.by(
+		() => new SvelteSet(sessionsInRange.map((session) => session.id))
+	);
 
 	const recordsInRange = $derived.by(() =>
 		attendanceRecords.filter(
@@ -287,14 +300,14 @@
 	});
 
 	const studentInsightMap = $derived.by(() => {
-		const grouped = new Map<string, AttendanceRecord[]>();
+		const grouped = new SvelteMap<string, AttendanceRecord[]>();
 		for (const record of recordsInRange) {
 			const existing = grouped.get(record.studentId) ?? [];
 			existing.push(record);
 			grouped.set(record.studentId, existing);
 		}
 
-		const next = new Map<string, StudentAttendanceInsight>();
+		const next = new SvelteMap<string, StudentAttendanceInsight>();
 		for (const student of activeStudents) {
 			const studentRecords = grouped.get(student.id) ?? [];
 			if (studentRecords.length === 0) continue;
@@ -390,9 +403,9 @@
 		if (Number.isNaN(currentWeekStart.getTime())) return [];
 
 		const rows: WeeklyTrendRow[] = [];
-		const map = new Map<string, WeeklyTrendRow>();
+		const map = new SvelteMap<string, WeeklyTrendRow>();
 		for (let index = weekCount - 1; index >= 0; index -= 1) {
-			const date = new Date(currentWeekStart);
+			const date = new SvelteDate(currentWeekStart);
 			date.setDate(date.getDate() - index * 7);
 			const weekKey = toIsoDate(date);
 			const label = `${date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}`;
@@ -430,16 +443,16 @@
 	});
 
 	const clubPerformance = $derived.by<ClubAttendanceInsight[]>(() => {
-		const sessionIdsByClub = new Map<string, Set<string>>();
+		const sessionIdsByClub = new SvelteMap<string, SvelteSet<string>>();
 		for (const session of sessionsInRange) {
-			const set = sessionIdsByClub.get(session.clubId) ?? new Set<string>();
+			const set = sessionIdsByClub.get(session.clubId) ?? new SvelteSet<string>();
 			set.add(session.id);
 			sessionIdsByClub.set(session.clubId, set);
 		}
 
 		return activeClubs
 			.map((club) => {
-				const sessionIds = sessionIdsByClub.get(club.id) ?? new Set<string>();
+				const sessionIds = sessionIdsByClub.get(club.id) ?? new SvelteSet<string>();
 				const clubRecords = recordsInRange.filter((record) => sessionIds.has(record.sessionId));
 				const marked = clubRecords.filter((record) => record.attendanceStatus !== 'unmarked').length;
 				const attended = clubRecords.filter((record) => ATTENDED_STATUSES.has(record.attendanceStatus))
@@ -537,7 +550,7 @@
 		{#snippet actions()}
 			<a
 				class="inline-flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:border-slate-300"
-				href="/attendance"
+				href={resolve('/attendance')}
 				use:tooltip={{ text: 'Mở điểm danh', placement: 'bottom' }}
 				aria-label="Mở điểm danh"
 			>
@@ -545,7 +558,7 @@
 			</a>
 			<a
 				class="inline-flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:border-slate-300"
-				href="/students"
+				href={resolve('/students')}
 				use:tooltip={{ text: 'Quản lý võ sinh', placement: 'bottom' }}
 				aria-label="Quản lý võ sinh"
 			>
@@ -798,17 +811,14 @@
 							{selectedStudentInsight.student.studentCode ?? 'Chưa có mã'}
 						</p>
 					</div>
-						<a
-							href={
-								selectedStudentInsight.student.studentCode
-									? `/students?studentCode=${encodeURIComponent(selectedStudentInsight.student.studentCode)}&open=1`
-									: `/students?studentId=${encodeURIComponent(selectedStudentInsight.student.id)}&open=1`
-							}
+						<button
+							type="button"
 							class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+							onclick={() => openStudentPopup(selectedStudentInsight.student)}
 						>
 							<span class="icon-[mdi--open-in-new] size-4"></span>
 							<span>Mở popup chỉnh sửa</span>
-						</a>
+						</button>
 				</div>
 				<div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
 					<div class="rounded-lg bg-white px-3 py-2 text-sm">

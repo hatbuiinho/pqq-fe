@@ -70,6 +70,7 @@
 	let membershipFormErrors = $state<MembershipFormErrors>({});
 	let isAddingMembership = $state(false);
 	let removingMembershipId = $state('');
+	let hasRequestedInitialData = $state(false);
 	const canManageUsers = $derived.by(() =>
 		hasSystemPermissionForSession($authSession, 'users:manage')
 	);
@@ -106,10 +107,10 @@
 	});
 
 	$effect(() => {
-		search;
-		selectedSystemRole;
-		selectedActiveStatus;
-		currentPage = 1;
+		const resetDependencies = [search, selectedSystemRole, selectedActiveStatus];
+		if (resetDependencies.length >= 0) {
+			currentPage = 1;
+		}
 	});
 
 	$effect(() => {
@@ -118,8 +119,10 @@
 	});
 
 	onMount(() => {
-		if (!canManageUsers) return;
-		void loadInitialData();
+		if (canManageUsers && !hasRequestedInitialData) {
+			hasRequestedInitialData = true;
+			void loadInitialData();
+		}
 	});
 
 	$effect(() => {
@@ -129,9 +132,11 @@
 			isMembershipModalOpen = false;
 			isCreateModalOpen = false;
 			isResetPasswordModalOpen = false;
+			hasRequestedInitialData = false;
 			return;
 		}
-		if (!isLoading && users.length === 0) {
+		if (!hasRequestedInitialData) {
+			hasRequestedInitialData = true;
 			void loadInitialData();
 		}
 	});

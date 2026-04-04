@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { SvelteMap } from 'svelte/reactivity';
 	import { onMount } from 'svelte';
 	import {
 		DataTableToolbar,
@@ -103,7 +104,7 @@
 		)
 	);
 	const groupCountByClubId = $derived.by(() => {
-		const counts = new Map<string, number>();
+		const counts = new SvelteMap<string, number>();
 		for (const group of clubGroups) {
 			if (group.deletedAt) continue;
 			counts.set(group.clubId, (counts.get(group.clubId) ?? 0) + 1);
@@ -111,7 +112,7 @@
 		return counts;
 	});
 	const scheduleByClubId = $derived.by(() => {
-		const map = new Map<string, Weekday[]>();
+		const map = new SvelteMap<string, Weekday[]>();
 		for (const schedule of clubSchedules) {
 			if (schedule.deletedAt || !schedule.isActive) continue;
 			const existing = map.get(schedule.clubId) ?? [];
@@ -151,8 +152,10 @@
 	});
 
 	$effect(() => {
-		search;
-		currentPage = 1;
+		const resetKey = search;
+		if (resetKey !== undefined) {
+			currentPage = 1;
+		}
 	});
 
 	$effect(() => {

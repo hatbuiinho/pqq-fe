@@ -1,4 +1,5 @@
 import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
 import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 import { clearAppData } from '$lib/data/local/app-db';
 import { writable, get } from 'svelte/store';
@@ -245,10 +246,10 @@ export function withAuthHeaders(headers?: HeadersInit): Headers {
 	return nextHeaders;
 }
 
-export async function logout(redirectTo = '/login') {
+export async function logout(redirectTo: '/login' | '/' = '/login') {
 	clearAuthSession();
 	await resetLocalStateForAuthenticatedUser();
-	await goto(redirectTo);
+	await goto(resolve(redirectTo));
 }
 
 export function setActiveClubId(clubId: string) {
