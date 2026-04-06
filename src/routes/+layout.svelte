@@ -589,15 +589,14 @@
 								{@const isActive =
 									page.url.pathname === item.href ||
 									(item.href !== '/' && page.url.pathname.startsWith(item.href))}
-								<a
-									href={resolve(item.href)}
-									class={`group relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200 ${
+								<button
+									type="button"
+									class={`group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${
 										isActive
 											? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
 											: 'text-white/68 hover:bg-white/6 hover:text-white'
 									}`}
-									onclick={(event) => {
-										event.preventDefault();
+									onclick={() => {
 										navigateTo(item.href);
 									}}
 								>
@@ -619,7 +618,7 @@
 											class="size-2 rounded-full bg-(--app-accent-cyan) shadow-[0_0_0_4px_rgba(101,199,203,0.14)]"
 										></span>
 									{/if}
-								</a>
+								</button>
 							{/each}
 						</nav>
 
@@ -1033,17 +1032,16 @@
 								{issue.syncError ?? 'Đồng bộ thất bại nhưng chưa có thông tin lỗi chi tiết.'}
 							</p>
 						</div>
-						<a
-							href={resolve(issue.href)}
+						<button
+							type="button"
 							class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-							onclick={(event) => {
-								event.preventDefault();
+							onclick={() => {
 								openSyncIssue(issue.href);
 							}}
 						>
 							<span class="icon-[mdi--open-in-new] size-4"></span>
 							<span>Mở</span>
-						</a>
+						</button>
 					</div>
 				</div>
 			{/each}
