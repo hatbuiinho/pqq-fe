@@ -46,8 +46,10 @@ export class StudentScheduleUseCases {
 		const student = await this.studentRepo.getById(studentId);
 		if (!student || student.deletedAt) throw new Error('Student does not exist.');
 		await this.validateScheduleInput(student.clubId, mode, weekdays);
-		await this.saveForStudentsInternal([studentId], mode, weekdays);
-		emitDataChanged();
+		const hasChanges = await this.saveForStudentsInternal([studentId], mode, weekdays);
+		if (hasChanges) {
+			emitDataChanged();
+		}
 	}
 
 	async bulkSave(
@@ -74,11 +76,16 @@ export class StudentScheduleUseCases {
 			);
 		}
 
-		await this.saveForStudentsInternal(uniqueIDs, mode, weekdays);
+		const hasChanges = await this.saveForStudentsInternal(uniqueIDs, mode, weekdays);
 
-		if (emitChange) {
+		if (emitChange && hasChanges) {
 			emitDataChanged();
 		}
+	}
+
+	private haveSameWeekdays(left: Weekday[], right: Weekday[]): boolean {
+		if (left.length !== right.length) return false;
+		return left.every((weekday, index) => weekday === right[index]);
 	}
 
 	private async validateScheduleInput(
@@ -111,11 +118,12 @@ export class StudentScheduleUseCases {
 		studentIds: string[],
 		mode: StudentScheduleMode,
 		weekdays: Weekday[]
-	): Promise<void> {
+	): Promise<boolean> {
 		const normalizedWeekdays = sortWeekdays(weekdays);
 		const targetWeekdays = mode === 'custom' ? normalizedWeekdays : [];
 		const db = getDB();
 		const now = new Date().toISOString();
+		let hasChanges = false;
 
 		await db.transaction('rw', db.studentScheduleProfiles, db.studentSchedules, async () => {
 			for (const studentId of studentIds) {
@@ -123,6 +131,25 @@ export class StudentScheduleUseCases {
 					.where('studentId')
 					.equals(studentId)
 					.first();
+				const existingSchedules = await db.studentSchedules
+					.where('studentId')
+					.equals(studentId)
+					.toArray();
+				const existingMode = !existingProfile || existingProfile.deletedAt ? 'inherit' : existingProfile.mode;
+				const activeExistingWeekdays = sortWeekdays(
+					existingSchedules
+						.filter((row) => row.isActive && !row.deletedAt)
+						.map((row) => row.weekday)
+				);
+				const scheduleUnchanged =
+					existingMode === mode && this.haveSameWeekdays(activeExistingWeekdays, targetWeekdays);
+
+				if (scheduleUnchanged) {
+					continue;
+				}
+
+				hasChanges = true;
+
 				if (existingProfile) {
 					await db.studentScheduleProfiles.update(existingProfile.id, {
 						mode,
@@ -132,7 +159,7 @@ export class StudentScheduleUseCases {
 						syncStatus: 'pending',
 						syncError: undefined
 					});
-				} else {
+				} else if (mode !== 'inherit') {
 					await db.studentScheduleProfiles.add({
 						id: studentId,
 						studentId,
@@ -144,11 +171,6 @@ export class StudentScheduleUseCases {
 						syncError: undefined
 					});
 				}
-
-				const existingSchedules = await db.studentSchedules
-					.where('studentId')
-					.equals(studentId)
-					.toArray();
 				const incomingWeekdays = new Set(targetWeekdays);
 
 				for (const row of existingSchedules) {
@@ -185,5 +207,7 @@ export class StudentScheduleUseCases {
 				}
 			}
 		});
+
+		return hasChanges;
 	}
 }
