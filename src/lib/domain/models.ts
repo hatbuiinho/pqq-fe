@@ -228,6 +228,8 @@ export interface ClubInvite {
 	lastUsedAt?: string;
 	acceptedAt?: string;
 	acceptedByUserId?: string;
+	acceptedByName?: string;
+	acceptedByEmail?: string;
 	revokedAt?: string;
 	createdAt: string;
 	updatedAt: string;

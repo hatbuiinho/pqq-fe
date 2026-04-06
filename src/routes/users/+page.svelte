@@ -255,6 +255,22 @@
 		return 'border-sky-200 bg-sky-50 text-sky-700';
 	}
 
+	function getInviteAcceptedAccountLabel(invite: ClubInvite): string {
+		if (invite.acceptedByName?.trim()) {
+			if (invite.acceptedByEmail?.trim()) {
+				return `${invite.acceptedByName.trim()} (${invite.acceptedByEmail.trim()})`;
+			}
+			return invite.acceptedByName.trim();
+		}
+		if (invite.acceptedByEmail?.trim()) {
+			return invite.acceptedByEmail.trim();
+		}
+		if (invite.acceptedByUserId) {
+			return `Tài khoản ${invite.acceptedByUserId.slice(0, 8)}`;
+		}
+		return 'Chưa có thông tin';
+	}
+
 	function resetCreateInviteForm() {
 		createInviteForm = { ...initialCreateInviteForm };
 		createInviteErrors = {};
@@ -720,6 +736,9 @@
 										<p>Người tạo: {invite.inviterName}</p>
 										<p>Hết hạn: {new Date(invite.expiresAt).toLocaleString()}</p>
 										<p>Lượt dùng: {invite.useCount}/{invite.maxUses}</p>
+										{#if invite.acceptedAt}
+											<p>Tài khoản đã đăng ký: {getInviteAcceptedAccountLabel(invite)}</p>
+										{/if}
 									</div>
 								</div>
 								<div class="flex flex-wrap justify-end gap-2">
