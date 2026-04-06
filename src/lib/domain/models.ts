@@ -264,6 +264,7 @@ export interface AcceptClubInvitePayload {
 export interface AuditLog {
 	id: string;
 	actorUserId?: string;
+	actorName?: string;
 	clubId?: string;
 	entityType: string;
 	entityId?: string;
