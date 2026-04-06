@@ -2,12 +2,14 @@ import { withAuthHeaders } from '$lib/app/auth';
 import { getApiBaseUrl } from '$lib/app/sync/sync-config';
 import type {
 	AcceptClubInvitePayload,
+	AuditLog,
 	ClubInvite,
 	ClubInvitePreview,
 	CreateUserMembershipPayload,
 	CreateClubInvitePayload,
 	CreateClubInviteResult,
 	CreateUserPayload,
+	ListAuditLogsQuery,
 	ResetUserPasswordPayload,
 	UpdateUserStatusPayload,
 	UserAccount,
@@ -25,6 +27,10 @@ type UserMembershipsResponse = {
 
 type ListClubInvitesResponse = {
 	items: ClubInvite[];
+};
+
+type ListAuditLogsResponse = {
+	items: AuditLog[];
 };
 
 function buildUrl(path: string) {
@@ -163,5 +169,22 @@ export const userManagementApi = {
 			user: UserAccount;
 			memberships: UserClubMembership[];
 		}>(response);
+	},
+
+	async listAuditLogs(query: ListAuditLogsQuery = {}): Promise<AuditLog[]> {
+		const search = new URLSearchParams();
+		if (query.clubId) search.set('clubId', query.clubId);
+		if (query.entityType) search.set('entityType', query.entityType);
+		if (query.entityId) search.set('entityId', query.entityId);
+		if (query.limit) search.set('limit', String(query.limit));
+
+		const response = await fetch(
+			buildUrl(`/api/v1/auth/audit-logs${search.size > 0 ? `?${search.toString()}` : ''}`),
+			{
+				headers: withAuthHeaders()
+			}
+		);
+		const payload = await parseJson<ListAuditLogsResponse>(response);
+		return payload.items ?? [];
 	}
 };

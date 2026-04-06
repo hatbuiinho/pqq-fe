@@ -260,3 +260,23 @@ export interface AcceptClubInvitePayload {
 	fullName?: string;
 	password: string;
 }
+
+export interface AuditLog {
+	id: string;
+	actorUserId?: string;
+	clubId?: string;
+	entityType: string;
+	entityId?: string;
+	action: string;
+	oldValues?: unknown;
+	newValues?: unknown;
+	metadata: Record<string, unknown>;
+	createdAt: string;
+}
+
+export interface ListAuditLogsQuery {
+	clubId?: string;
+	entityType?: string;
+	entityId?: string;
+	limit?: number;
+}

@@ -50,7 +50,7 @@
 			title: string;
 			detail?: string;
 			syncError?: string;
-			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users';
+			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs';
 		}>
 	>([]);
 	let { children } = $props();
@@ -79,7 +79,7 @@
 	let ownerInviteShareUrl = $state('');
 
 	const navItems: Array<{
-		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users';
+		href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs';
 		label: string;
 		icon: string;
 		accent: string;
@@ -119,6 +119,12 @@
 			label: 'Người dùng',
 			icon: 'icon-[mdi--account-cog-outline]',
 			accent: 'from-[#73b8bf] to-[#4f7ea3]'
+		},
+		{
+			href: '/audit-logs',
+			label: 'Nhật ký',
+			icon: 'icon-[mdi--history]',
+			accent: 'from-[#6db9b4] to-[#3f8f93]'
 		}
 	];
 	const publicStudentDetailPattern = /^\/students\/[^/]+$/;
@@ -132,18 +138,22 @@
 	const showAppChrome = $derived(isAuthReady && !!currentAuthSession && !isPublicRoute);
 	const isSystemAdmin = $derived(currentAuthSession?.user.systemRole === 'sys_admin');
 	const canManageAdminAreas = $derived(isSystemAdmin);
+	const activeClubMembership = $derived(
+		currentAuthSession?.memberships.find(
+			(membership) => membership.clubId === currentAuthSession?.activeClubId
+		) ?? currentAuthSession?.memberships[0]
+	);
+	const canReadAuditLogs = $derived(isSystemAdmin || activeClubMembership?.clubRole === 'owner');
 	const visibleNavItems = $derived.by(() =>
 		navItems.filter((item) => {
 			if (item.href === '/clubs' || item.href === '/belt-ranks' || item.href === '/users') {
 				return canManageAdminAreas;
 			}
+			if (item.href === '/audit-logs') {
+				return canReadAuditLogs;
+			}
 			return true;
 		})
-	);
-	const activeClubMembership = $derived(
-		currentAuthSession?.memberships.find(
-			(membership) => membership.clubId === currentAuthSession?.activeClubId
-		) ?? currentAuthSession?.memberships[0]
 	);
 	const canShareOwnerInvite = $derived(activeClubMembership?.clubRole === 'owner');
 
@@ -153,6 +163,11 @@
 
 	function closeSidebar() {
 		sidebarOpen = false;
+	}
+
+	function navigateTo(path: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs') {
+		closeSidebar();
+		void goto(resolve(path));
 	}
 
 	function toggleProfilePopover() {
@@ -382,6 +397,11 @@
 		syncIssuesOpen = false;
 	}
 
+	function openSyncIssue(path: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs') {
+		closeSyncIssues();
+		void goto(resolve(path));
+	}
+
 	function getEntityLabel(
 		entityName:
 			| 'clubs'
@@ -473,6 +493,10 @@
 				pathname.startsWith('/users')) &&
 			!canManageAdminAreas
 		) {
+			void goto(resolve('/'), { replaceState: true });
+		}
+
+		if (currentAuthSession && pathname.startsWith('/audit-logs') && !canReadAuditLogs) {
 			void goto(resolve('/'), { replaceState: true });
 		}
 	});
@@ -572,7 +596,10 @@
 											? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
 											: 'text-white/68 hover:bg-white/6 hover:text-white'
 									}`}
-									onclick={closeSidebar}
+									onclick={(event) => {
+										event.preventDefault();
+										navigateTo(item.href);
+									}}
 								>
 									<span
 										class={`absolute inset-y-2 left-1 w-1 rounded-full bg-linear-to-b ${item.accent} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-70'}`}
@@ -1009,7 +1036,10 @@
 						<a
 							href={resolve(issue.href)}
 							class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-							onclick={closeSyncIssues}
+							onclick={(event) => {
+								event.preventDefault();
+								openSyncIssue(issue.href);
+							}}
 						>
 							<span class="icon-[mdi--open-in-new] size-4"></span>
 							<span>Mở</span>
