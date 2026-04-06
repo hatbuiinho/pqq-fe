@@ -991,7 +991,7 @@
 >
 	{#if importSummary}
 		<div class="space-y-4">
-			<div class="rounded-xl border border-slate-200 bg-white px-4 py-4">
+			<div class="rounded-xl border border-slate-200 bg-white p-4">
 				<div class="flex flex-wrap items-center gap-3">
 					<span
 						class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
@@ -1009,7 +1009,7 @@
 					<div class="mt-4 max-h-80 space-y-2 overflow-y-auto">
 						{#each importErrors as importError (`${importError.row}:${importError.message}`)}
 							<div
-								class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700"
+							class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
 							>
 								<p class="font-semibold">Row {importError.row}</p>
 								<p class="mt-1">{importError.message}</p>

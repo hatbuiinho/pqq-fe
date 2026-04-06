@@ -1407,7 +1407,7 @@
 					<label class="flex items-center gap-2 text-sm text-slate-700">
 						<input
 							type="checkbox"
-							class="h-4 w-4 rounded-md border-slate-300"
+							class="size-4 rounded-md border-slate-300"
 							checked={allFilteredStudentsSelected}
 							onchange={toggleSelectAllFilteredStudents}
 						/>
@@ -1460,7 +1460,7 @@
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
-										class="h-4 w-4 shrink-0 rounded-md border-slate-300"
+									class="size-4 shrink-0 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={true}
 									/>
@@ -1481,11 +1481,11 @@
 								</div>
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
-										<span class="icon-[mdi--card-account-details-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--card-account-details-outline] size-4 shrink-0"></span>
 										<span class="truncate">{student.studentCode ?? 'Tạo khi đồng bộ'}</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
-										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--account-group-outline] size-4 shrink-0"></span>
 										<span class="truncate">
 											{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
 												• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
@@ -1494,13 +1494,13 @@
 										</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-500">
-										<span class="icon-[mdi--calendar-week-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--calendar-week-outline] size-4 shrink-0"></span>
 										<span class="truncate"
 											>{getStudentScheduleSummary(student.id, student.clubId)}</span
 										>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
-										<span class="icon-[mdi--sync-alert] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--sync-alert] size-4 shrink-0"></span>
 										<span class="truncate">
 											{student.syncStatus === 'failed' ? 'Xóa thất bại' : 'Chờ xóa'}
 										</span>
@@ -1540,7 +1540,7 @@
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
-										class="h-4 w-4 shrink-0 rounded-md border-slate-300"
+									class="size-4 shrink-0 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={false}
 										onclick={(event) => event.stopPropagation()}
@@ -1563,11 +1563,11 @@
 								</div>
 								<div class="space-y-1 text-sm">
 									<p class="flex items-center gap-2 text-slate-500">
-										<span class="icon-[mdi--card-account-details-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--card-account-details-outline] size-4 shrink-0"></span>
 										<span class="truncate">{student.studentCode ?? 'Tạo khi đồng bộ'}</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
-										<span class="icon-[mdi--account-group-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--account-group-outline] size-4 shrink-0"></span>
 										<span class="truncate">
 											{clubMap.get(student.clubId) ?? '-'}{#if student.groupId}
 												• {groupMap.get(student.groupId) ?? '-'}{/if} • {beltRankMap.get(
@@ -1576,13 +1576,13 @@
 										</span>
 									</p>
 									<p class="flex items-center gap-2 text-slate-500">
-										<span class="icon-[mdi--calendar-week-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--calendar-week-outline] size-4 shrink-0"></span>
 										<span class="truncate"
 											>{getStudentScheduleSummary(student.id, student.clubId)}</span
 										>
 									</p>
 									<p class="flex items-center gap-2 text-slate-600">
-										<span class="icon-[mdi--account-check-outline] h-4 w-4 shrink-0"></span>
+										<span class="icon-[mdi--account-check-outline] size-4 shrink-0"></span>
 										<span class="truncate">{getStudentStatusLabel(student.status)}</span>
 									</p>
 								</div>
@@ -1620,7 +1620,7 @@
 							<th class="py-2 pr-3">
 								<input
 									type="checkbox"
-									class="h-4 w-4 rounded-md border-slate-300"
+								class="size-4 rounded-md border-slate-300"
 									checked={allFilteredStudentsSelected}
 									onchange={toggleSelectAllFilteredStudents}
 								/>
@@ -1644,7 +1644,7 @@
 								<td class="py-3 pr-3">
 									<input
 										type="checkbox"
-										class="h-4 w-4 rounded-md border-slate-300"
+									class="size-4 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={!!student.deletedAt}
 										onclick={(event) => event.stopPropagation()}
@@ -1772,7 +1772,7 @@
 		<label
 			class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center"
 		>
-			<span class="icon-[mdi--file-excel-outline] h-8 w-8 text-slate-500"></span>
+			<span class="icon-[mdi--file-excel-outline] size-8 text-slate-500"></span>
 			<span class="text-sm font-medium text-slate-700"
 				>{importFileName || 'Chọn file Excel (.xlsx, .xls)'}</span
 			>
@@ -1888,7 +1888,7 @@
 				ondragleave={handleAvatarImportDragLeave}
 				ondrop={handleAvatarImportDrop}
 			>
-				<span class="icon-[mdi--image-multiple-outline] h-8 w-8 text-slate-500"></span>
+				<span class="icon-[mdi--image-multiple-outline] size-8 text-slate-500"></span>
 				<span class="text-sm font-medium text-slate-700">
 					{avatarImportFileNames.length > 0
 						? `Đã chọn ${avatarImportFileNames.length} file`

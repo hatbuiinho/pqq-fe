@@ -80,12 +80,12 @@
 				<img
 					src={data.avatarThumbUrl || data.avatarUrl}
 					alt={`Avatar ${data.profile.fullName}`}
-					class="h-28 w-28 rounded-2xl border border-slate-200 object-cover"
+					class="size-28 rounded-2xl border border-slate-200 object-cover"
 					loading="eager"
 				/>
 			{:else}
 				<div
-					class="flex h-28 w-28 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-xs font-medium tracking-[0.2em] text-slate-500 uppercase"
+					class="flex size-28 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-xs font-medium tracking-[0.2em] text-slate-500 uppercase"
 				>
 					No avatar
 				</div>

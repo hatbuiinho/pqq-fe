@@ -572,7 +572,7 @@
 				}`}
 			>
 				<div class="flex h-full min-h-0 flex-col">
-					<div class="relative border-b border-white/10 px-5 py-5">
+					<div class="relative border-b border-white/10 p-5">
 						<h1 class="relative mt-2 text-xl font-bold tracking-tight text-white">
 							Phật Quang Quyền
 						</h1>
@@ -591,7 +591,7 @@
 									(item.href !== '/' && page.url.pathname.startsWith(item.href))}
 								<button
 									type="button"
-									class={`group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${
+									class={`group relative flex w-full items-center gap-3 overflow-hidden rounded-2xl p-3 text-left text-sm font-medium transition-all duration-200 ${
 										isActive
 											? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
 											: 'text-white/68 hover:bg-white/6 hover:text-white'
@@ -657,7 +657,7 @@
 									</div>
 								</div>
 
-								<div class="rounded-xl border border-white/10 bg-slate-950/18 px-3 py-3 text-sm">
+							<div class="rounded-xl border border-white/10 bg-slate-950/18 p-3 text-sm">
 									<div class="flex items-center justify-between gap-3">
 										<span class="text-white/48">Lần đồng bộ gần nhất</span>
 										<span class="text-right text-white/80"
@@ -788,7 +788,7 @@
 												</span>
 												{#if isSystemAdmin}
 													<select
-														class="w-full rounded-2xl border border-(--app-line) bg-white px-3 py-3 text-sm text-(--app-ink) transition outline-none focus:border-slate-400"
+													class="w-full rounded-2xl border border-(--app-line) bg-white p-3 text-sm text-(--app-ink) transition outline-none focus:border-slate-400"
 														value={activeClubMembership?.clubId ?? ''}
 														onchange={(event) => {
 															setActiveClubId(event.currentTarget.value);
@@ -805,7 +805,7 @@
 													</select>
 												{:else if activeClubMembership}
 													<div
-														class="rounded-2xl border border-(--app-line) bg-slate-50 px-3 py-3 text-sm text-(--app-ink)"
+													class="rounded-2xl border border-(--app-line) bg-slate-50 p-3 text-sm text-(--app-ink)"
 													>
 														{activeClubMembership.clubName} · {activeClubMembership.clubRole ===
 														'owner'

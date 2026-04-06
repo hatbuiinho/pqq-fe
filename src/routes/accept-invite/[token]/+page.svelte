@@ -113,7 +113,7 @@
 				Đang tải thông tin lời mời...
 			</div>
 		{:else if previewError}
-			<div class="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
+			<div class="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
 				{previewError}
 			</div>
 		{:else if preview}
