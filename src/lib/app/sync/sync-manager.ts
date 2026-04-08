@@ -8,10 +8,12 @@ import type {
 	ClubGroup,
 	ClubSchedule,
 	Student,
+	StudentMessage,
 	StudentSchedule,
 	StudentScheduleProfile
 } from '$lib/domain/models';
 import type {
+	AttendanceActionMutation,
 	SyncEntityMap,
 	SyncEntityName,
 	SyncMutation,
@@ -107,6 +109,7 @@ class SyncManager {
 		updateSyncStatus({ isSyncing: true, lastError: undefined, online: navigator.onLine });
 
 		try {
+			await this.pushPendingAttendanceActions();
 			await this.pushPendingMutations();
 			await this.pullLatestChanges();
 			await this.refreshPendingCount();
@@ -163,6 +166,7 @@ class SyncManager {
 					db.clubSchedules,
 					db.beltRanks,
 					db.students,
+					db.studentMessages,
 					db.studentScheduleProfiles,
 					db.studentSchedules,
 					db.attendanceSessions,
@@ -205,6 +209,14 @@ class SyncManager {
 						const existing = await db.students.get(student.id);
 						if (!existing || existing.deletedAt) {
 							await db.students.put({ ...student, syncStatus: 'synced' });
+							addedCount += 1;
+						}
+					}
+
+					for (const studentMessage of response.studentMessages) {
+						const existing = await db.studentMessages.get(studentMessage.id);
+						if (!existing || existing.deletedAt) {
+							await db.studentMessages.put({ ...studentMessage, syncStatus: 'synced' });
 							addedCount += 1;
 						}
 					}
@@ -349,6 +361,7 @@ class SyncManager {
 				getDB().clubSchedules,
 				getDB().beltRanks,
 				getDB().students,
+				getDB().studentMessages,
 				getDB().studentScheduleProfiles,
 				getDB().studentSchedules,
 				getDB().attendanceSessions,
@@ -371,6 +384,73 @@ class SyncManager {
 		);
 
 		if (response.applied.length > 0 || response.conflicts.length > 0) {
+			emitDataChanged('sync');
+		}
+	}
+
+	private async pushPendingAttendanceActions(): Promise<void> {
+		const actions = await this.collectPendingAttendanceActions();
+		if (actions.length === 0) return;
+
+		const db = getDB();
+		const response = await this.apiClient.pushAttendanceActions({
+			deviceId: this.getDeviceID(),
+			actions
+		});
+
+		await db.transaction(
+			'rw',
+			[
+				db.attendanceActionQueue,
+				db.attendanceSessions,
+				db.attendanceRecords
+			],
+			async () => {
+				for (const appliedActionID of response.appliedActionIds) {
+					await db.attendanceActionQueue.delete(appliedActionID);
+				}
+
+				for (const change of response.changes) {
+					await this.saveRemoteRecord(change.entityName, change.record);
+				}
+
+				for (const error of response.errors) {
+					await db.attendanceActionQueue.update(error.actionId, {
+						status: 'failed',
+						error: error.message,
+						updatedAt: response.serverTime
+					});
+
+					let hasServerSnapshot = false;
+					if (error.serverSession) {
+						await this.saveRemoteRecord('attendance_sessions', error.serverSession);
+						hasServerSnapshot = true;
+					}
+					if (error.serverRecord) {
+						await this.saveRemoteRecord('attendance_records', error.serverRecord);
+						hasServerSnapshot = true;
+					}
+
+					if (hasServerSnapshot) {
+						continue;
+					}
+
+					if (error.recordId) {
+						await db.attendanceRecords.update(error.recordId, {
+							syncStatus: 'failed',
+							syncError: error.message
+						});
+					} else {
+						await db.attendanceSessions.update(error.sessionId, {
+							syncStatus: 'failed',
+							syncError: error.message
+						});
+					}
+				}
+			}
+		);
+
+		if (response.appliedActionIds.length > 0 || response.errors.length > 0) {
 			emitDataChanged('sync');
 		}
 	}
@@ -401,6 +481,7 @@ class SyncManager {
 					getDB().clubSchedules,
 					getDB().beltRanks,
 					getDB().students,
+					getDB().studentMessages,
 					getDB().studentScheduleProfiles,
 					getDB().studentSchedules,
 					getDB().attendanceSessions,
@@ -436,20 +517,18 @@ class SyncManager {
 			clubSchedules,
 			beltRanks,
 			students,
+			studentMessages,
 			studentScheduleProfiles,
-			studentSchedules,
-			attendanceSessions,
-			attendanceRecords
+			studentSchedules
 		] = await Promise.all([
 			db.clubs.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
 			db.clubGroups.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
 			db.clubSchedules.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
 			db.beltRanks.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
 			db.students.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
+			db.studentMessages.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
 			db.studentScheduleProfiles.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
-			db.studentSchedules.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
-			db.attendanceSessions.where('syncStatus').anyOf(['pending', 'failed']).toArray(),
-			db.attendanceRecords.where('syncStatus').anyOf(['pending', 'failed']).toArray()
+			db.studentSchedules.where('syncStatus').anyOf(['pending', 'failed']).toArray()
 		]);
 
 		return [
@@ -458,13 +537,31 @@ class SyncManager {
 			...clubSchedules.map((record) => this.toMutation('club_schedules', record)),
 			...beltRanks.map((record) => this.toMutation('belt_ranks', record)),
 			...students.map((record) => this.toMutation('students', record)),
+			...studentMessages.map((record) => this.toMutation('student_messages', record)),
 			...studentScheduleProfiles.map((record) =>
 				this.toMutation('student_schedule_profiles', record)
 			),
-			...studentSchedules.map((record) => this.toMutation('student_schedules', record)),
-			...attendanceSessions.map((record) => this.toMutation('attendance_sessions', record)),
-			...attendanceRecords.map((record) => this.toMutation('attendance_records', record))
+			...studentSchedules.map((record) => this.toMutation('student_schedules', record))
 		];
+	}
+
+	private async collectPendingAttendanceActions(): Promise<AttendanceActionMutation[]> {
+		const items = await getDB()
+			.attendanceActionQueue
+			.where('status')
+			.anyOf(['pending', 'failed'])
+			.sortBy('clientOccurredAt');
+
+		return items.map((item) => ({
+			actionId: item.id,
+			actionType: item.actionType,
+			clubId: item.clubId,
+			sessionId: item.sessionId,
+			recordId: item.recordId,
+			studentId: item.studentId,
+			payload: item.payload,
+			clientOccurredAt: item.clientOccurredAt
+		}));
 	}
 
 	private toMutation<TEntityName extends SyncEntityName>(
@@ -523,6 +620,13 @@ class SyncManager {
 					syncError: undefined
 				});
 				return;
+			case 'student_messages':
+				await db.studentMessages.put({
+					...(record as StudentMessage),
+					syncStatus: 'synced',
+					syncError: undefined
+				});
+				return;
 			case 'student_schedule_profiles':
 				await db.studentScheduleProfiles.put({
 					...(record as StudentScheduleProfile),
@@ -575,6 +679,9 @@ class SyncManager {
 				return;
 			case 'students':
 				await db.students.update(recordID, { syncStatus: 'failed', syncError: message });
+				return;
+			case 'student_messages':
+				await db.studentMessages.update(recordID, { syncStatus: 'failed', syncError: message });
 				return;
 			case 'student_schedule_profiles':
 				await db.studentScheduleProfiles.update(recordID, {
@@ -638,38 +745,38 @@ class SyncManager {
 			pendingClubScheduleCount,
 			pendingBeltRankCount,
 			pendingStudentCount,
+			pendingStudentMessageCount,
 			pendingStudentScheduleProfileCount,
 			pendingStudentScheduleCount,
-			pendingAttendanceSessionCount,
-			pendingAttendanceRecordCount,
+			pendingAttendanceActionCount,
 			failedClubCount,
 			failedClubGroupCount,
 			failedClubScheduleCount,
 			failedBeltRankCount,
 			failedStudentCount,
+			failedStudentMessageCount,
 			failedStudentScheduleProfileCount,
 			failedStudentScheduleCount,
-			failedAttendanceSessionCount,
-			failedAttendanceRecordCount
+			failedAttendanceActionCount
 		] = await Promise.all([
 			db.clubs.where('syncStatus').equals('pending').count(),
 			db.clubGroups.where('syncStatus').equals('pending').count(),
 			db.clubSchedules.where('syncStatus').equals('pending').count(),
 			db.beltRanks.where('syncStatus').equals('pending').count(),
 			db.students.where('syncStatus').equals('pending').count(),
+			db.studentMessages.where('syncStatus').equals('pending').count(),
 			db.studentScheduleProfiles.where('syncStatus').equals('pending').count(),
 			db.studentSchedules.where('syncStatus').equals('pending').count(),
-			db.attendanceSessions.where('syncStatus').equals('pending').count(),
-			db.attendanceRecords.where('syncStatus').equals('pending').count(),
+			db.attendanceActionQueue.where('status').equals('pending').count(),
 			db.clubs.where('syncStatus').equals('failed').count(),
 			db.clubGroups.where('syncStatus').equals('failed').count(),
 			db.clubSchedules.where('syncStatus').equals('failed').count(),
 			db.beltRanks.where('syncStatus').equals('failed').count(),
 			db.students.where('syncStatus').equals('failed').count(),
+			db.studentMessages.where('syncStatus').equals('failed').count(),
 			db.studentScheduleProfiles.where('syncStatus').equals('failed').count(),
 			db.studentSchedules.where('syncStatus').equals('failed').count(),
-			db.attendanceSessions.where('syncStatus').equals('failed').count(),
-			db.attendanceRecords.where('syncStatus').equals('failed').count()
+			db.attendanceActionQueue.where('status').equals('failed').count()
 		]);
 
 		const pendingCount =
@@ -678,20 +785,20 @@ class SyncManager {
 			pendingClubScheduleCount +
 			pendingBeltRankCount +
 			pendingStudentCount +
+			pendingStudentMessageCount +
 			pendingStudentScheduleProfileCount +
 			pendingStudentScheduleCount +
-			pendingAttendanceSessionCount +
-			pendingAttendanceRecordCount;
+			pendingAttendanceActionCount;
 		const failedCount =
 			failedClubCount +
 			failedClubGroupCount +
 			failedClubScheduleCount +
 			failedBeltRankCount +
 			failedStudentCount +
+			failedStudentMessageCount +
 			failedStudentScheduleProfileCount +
 			failedStudentScheduleCount +
-			failedAttendanceSessionCount +
-			failedAttendanceRecordCount;
+			failedAttendanceActionCount;
 
 		updateSyncStatus({
 			pendingCount,

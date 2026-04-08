@@ -150,6 +150,46 @@ export interface AttendanceRecord extends BaseEntity<string> {
 	notes?: string;
 }
 
+export type StudentMessageType = 'manual' | 'attendance_note';
+
+export interface StudentMessage extends BaseEntity<string> {
+	studentId: string;
+	clubId: string;
+	messageType: StudentMessageType;
+	content: string;
+	authorUserId?: string;
+	authorName: string;
+	attendanceSessionId?: string;
+	attendanceRecordId?: string;
+	attendanceSessionDate?: string;
+	attendanceStatus?: AttendanceStatus;
+}
+
+export type AttendanceActionType =
+	| 'create_session'
+	| 'set_record_status'
+	| 'set_record_note'
+	| 'set_session_note'
+	| 'set_session_status'
+	| 'delete_session';
+
+export type AttendanceActionQueueStatus = 'pending' | 'failed';
+
+export interface AttendanceActionQueueItem {
+	id: string;
+	actionType: AttendanceActionType;
+	clubId: string;
+	sessionId: string;
+	recordId?: string;
+	studentId?: string;
+	payload: Record<string, unknown>;
+	status: AttendanceActionQueueStatus;
+	error?: string;
+	createdAt: string;
+	updatedAt: string;
+	clientOccurredAt: string;
+}
+
 export interface ClubSchedule extends BaseEntity<string> {
 	clubId: string;
 	weekday: Weekday;

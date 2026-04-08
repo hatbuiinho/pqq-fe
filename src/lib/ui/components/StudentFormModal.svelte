@@ -398,7 +398,6 @@
 			}
 			void refreshAvatarsIncremental(studentId);
 		});
-
 		mediaQuery.addEventListener('change', applyMobileMode);
 		document.addEventListener('pointerdown', handleOutsidePointerDown);
 		window.addEventListener('resize', handleViewportChange);

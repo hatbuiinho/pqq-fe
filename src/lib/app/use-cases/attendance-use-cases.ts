@@ -1,11 +1,14 @@
 import { emitDataChanged } from '$lib/app/data-events';
+import { getDB } from '$lib/data/local/app-db';
 import type {
+	AttendanceActionQueueItem,
 	AttendanceRecord,
 	AttendanceSession,
 	AttendanceSessionStatus,
 	AttendanceStatus,
 	Club,
-	Student
+	Student,
+	StudentMessage
 } from '$lib/domain/models';
 import type {
 	AttendanceRecordRepository,
@@ -36,6 +39,15 @@ type UpdateAttendanceInput = {
 	attendanceStatus: AttendanceStatus;
 	notes?: string;
 };
+
+type AttendanceActionTarget = Pick<
+	AttendanceActionQueueItem,
+	'actionType' | 'clubId' | 'sessionId' | 'recordId' | 'studentId'
+>;
+
+function attendanceMessageId(attendanceRecordId: string): string {
+	return `attendance-note-${attendanceRecordId}`;
+}
 
 export class AttendanceUseCases {
 	constructor(
@@ -109,9 +121,7 @@ export class AttendanceUseCases {
 			lastModifiedAt: now,
 			syncStatus: 'pending'
 		};
-
-		await this.sessionRepo.create(session);
-
+		const records: AttendanceRecord[] = [];
 		for (const student of expectedStudents) {
 			const record: AttendanceRecord = {
 				id: crypto.randomUUID(),
@@ -123,8 +133,33 @@ export class AttendanceUseCases {
 				lastModifiedAt: now,
 				syncStatus: 'pending'
 			};
-			await this.recordRepo.create(record);
+			records.push(record);
 		}
+
+		const db = getDB();
+		await db.transaction(
+			'rw',
+			[db.attendanceSessions, db.attendanceRecords, db.attendanceActionQueue],
+			async () => {
+				await db.attendanceSessions.add(session);
+				if (records.length > 0) {
+					await db.attendanceRecords.bulkAdd(records);
+				}
+				await this.enqueueAttendanceAction(
+					db,
+					{
+						actionType: 'create_session',
+						clubId: input.clubId,
+						sessionId: session.id
+					},
+					{
+						session,
+						records
+					},
+					now
+				);
+			}
+		);
 
 		emitDataChanged('attendance');
 		return session;
@@ -162,36 +197,127 @@ export class AttendanceUseCases {
 	async updateAttendance(input: UpdateAttendanceInput): Promise<void> {
 		const record = await this.recordRepo.getBySessionAndStudent(input.sessionId, input.studentId);
 		if (!record) throw new Error('Attendance record does not exist.');
+		const session = await this.sessionRepo.getById(input.sessionId);
+		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
 
 		const now = new Date().toISOString();
-		await this.recordRepo.update(record.id, {
-			attendanceStatus: input.attendanceStatus,
-			notes: input.notes?.trim() || undefined,
-			checkInAt:
-				input.attendanceStatus === 'present' || input.attendanceStatus === 'late' ? now : undefined,
-			updatedAt: now,
-			lastModifiedAt: now,
-			syncStatus: 'pending',
-			syncError: undefined
-		});
+		const normalizedNotes = input.notes?.trim() || undefined;
+		const attendanceStatusChanged = record.attendanceStatus !== input.attendanceStatus;
+		const nextCheckInAt = attendanceStatusChanged
+			? input.attendanceStatus === 'present' || input.attendanceStatus === 'late'
+				? record.checkInAt ?? now
+				: undefined
+			: record.checkInAt;
+		const statusChanged = attendanceStatusChanged || record.checkInAt !== nextCheckInAt;
+		const noteChanged = (record.notes ?? undefined) !== normalizedNotes;
+		if (!statusChanged && !noteChanged) return;
+
+		const db = getDB();
+		await db.transaction(
+			'rw',
+			[db.attendanceRecords, db.attendanceActionQueue, db.studentMessages],
+			async () => {
+			await db.attendanceRecords.update(record.id, {
+				attendanceStatus: input.attendanceStatus,
+				notes: normalizedNotes,
+				checkInAt: nextCheckInAt,
+				updatedAt: now,
+				lastModifiedAt: now,
+				syncStatus: 'pending',
+				syncError: undefined
+			});
+
+			if (statusChanged) {
+				await this.enqueueAttendanceAction(
+					db,
+					{
+						actionType: 'set_record_status',
+						clubId: session.clubId,
+						sessionId: input.sessionId,
+						recordId: record.id,
+						studentId: input.studentId
+					},
+					{
+						attendanceStatus: input.attendanceStatus,
+						checkInAt: nextCheckInAt
+					},
+					now
+				);
+			}
+
+			if (noteChanged) {
+				await this.syncLocalAttendanceMirrorMessage(
+					db,
+					{
+						...record,
+						attendanceStatus: input.attendanceStatus,
+						notes: normalizedNotes,
+						checkInAt: nextCheckInAt,
+						updatedAt: now,
+						lastModifiedAt: now,
+						syncStatus: 'pending'
+					},
+					session,
+					now
+				);
+
+				await this.enqueueAttendanceAction(
+					db,
+					{
+						actionType: 'set_record_note',
+						clubId: session.clubId,
+						sessionId: input.sessionId,
+						recordId: record.id,
+						studentId: input.studentId
+					},
+					{
+						notes: normalizedNotes
+					},
+					now
+				);
+			}
+			}
+		);
 
 		emitDataChanged('attendance');
 	}
 
 	async markAllPresent(sessionId: string): Promise<void> {
 		const records = await this.recordRepo.listBySession(sessionId);
+		const session = await this.sessionRepo.getById(sessionId);
+		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
 		const now = new Date().toISOString();
+		const db = getDB();
 
-		for (const record of records) {
-			await this.recordRepo.update(record.id, {
-				attendanceStatus: 'present',
-				checkInAt: now,
-				updatedAt: now,
-				lastModifiedAt: now,
-				syncStatus: 'pending',
-				syncError: undefined
-			});
-		}
+		await db.transaction('rw', [db.attendanceRecords, db.attendanceActionQueue], async () => {
+			for (const record of records) {
+				if (record.attendanceStatus === 'present' && record.checkInAt === now) continue;
+				if (record.attendanceStatus === 'present' && record.checkInAt) continue;
+				await db.attendanceRecords.update(record.id, {
+					attendanceStatus: 'present',
+					checkInAt: now,
+					updatedAt: now,
+					lastModifiedAt: now,
+					syncStatus: 'pending',
+					syncError: undefined
+				});
+				await this.enqueueAttendanceAction(
+					db,
+					{
+						actionType: 'set_record_status',
+						clubId: session.clubId,
+						sessionId,
+						recordId: record.id,
+						studentId: record.studentId
+					},
+					{
+						attendanceStatus: 'present',
+						checkInAt: now
+					},
+					now
+				);
+			}
+		});
 
 		emitDataChanged('attendance');
 	}
@@ -210,15 +336,32 @@ export class AttendanceUseCases {
 	}
 
 	async updateSessionNotes(sessionId: string, notes?: string): Promise<void> {
+		const session = await this.sessionRepo.getById(sessionId);
+		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
 		const now = new Date().toISOString();
-		const updated = await this.sessionRepo.update(sessionId, {
-			notes: notes?.trim() || undefined,
-			updatedAt: now,
-			lastModifiedAt: now,
-			syncStatus: 'pending',
-			syncError: undefined
+		const normalizedNotes = notes?.trim() || undefined;
+		if ((session.notes ?? undefined) === normalizedNotes) return;
+		const db = getDB();
+		await db.transaction('rw', [db.attendanceSessions, db.attendanceActionQueue], async () => {
+			const updated = await db.attendanceSessions.update(sessionId, {
+				notes: normalizedNotes,
+				updatedAt: now,
+				lastModifiedAt: now,
+				syncStatus: 'pending',
+				syncError: undefined
+			});
+			if (!updated) throw new Error('Attendance session does not exist.');
+			await this.enqueueAttendanceAction(
+				db,
+				{
+					actionType: 'set_session_note',
+					clubId: session.clubId,
+					sessionId
+				},
+				{ notes: normalizedNotes },
+				now
+			);
 		});
-		if (!updated) throw new Error('Attendance session does not exist.');
 		emitDataChanged('attendance');
 	}
 
@@ -228,13 +371,42 @@ export class AttendanceUseCases {
 
 		const deletedAt = new Date().toISOString();
 		const records = await this.recordRepo.listBySession(sessionId);
+		const db = getDB();
+		await db.transaction(
+			'rw',
+			[db.attendanceSessions, db.attendanceRecords, db.attendanceActionQueue],
+			async () => {
+				for (const record of records) {
+					await db.attendanceRecords.update(record.id, {
+						deletedAt,
+						updatedAt: deletedAt,
+						lastModifiedAt: deletedAt,
+						syncStatus: 'pending',
+						syncError: undefined
+					});
+				}
 
-		for (const record of records) {
-			await this.recordRepo.softDelete(record.id, deletedAt);
-		}
+				const deleted = await db.attendanceSessions.update(sessionId, {
+					deletedAt,
+					updatedAt: deletedAt,
+					lastModifiedAt: deletedAt,
+					syncStatus: 'pending',
+					syncError: undefined
+				});
+				if (!deleted) throw new Error('Attendance session does not exist.');
 
-		const deleted = await this.sessionRepo.softDelete(sessionId, deletedAt);
-		if (!deleted) throw new Error('Attendance session does not exist.');
+				await this.enqueueAttendanceAction(
+					db,
+					{
+						actionType: 'delete_session',
+						clubId: session.clubId,
+						sessionId
+					},
+					{ deletedAt },
+					deletedAt
+				);
+			}
+		);
 		emitDataChanged('attendance');
 	}
 
@@ -242,16 +414,118 @@ export class AttendanceUseCases {
 		sessionId: string,
 		status: AttendanceSessionStatus
 	): Promise<void> {
+		const session = await this.sessionRepo.getById(sessionId);
+		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
+		if (session.status === status) return;
 		const now = new Date().toISOString();
-		const updated = await this.sessionRepo.update(sessionId, {
-			status,
+		const db = getDB();
+		await db.transaction('rw', [db.attendanceSessions, db.attendanceActionQueue], async () => {
+			const updated = await db.attendanceSessions.update(sessionId, {
+				status,
+				updatedAt: now,
+				lastModifiedAt: now,
+				syncStatus: 'pending',
+				syncError: undefined
+			});
+			if (!updated) throw new Error('Attendance session does not exist.');
+			await this.enqueueAttendanceAction(
+				db,
+				{
+					actionType: 'set_session_status',
+					clubId: session.clubId,
+					sessionId
+				},
+				{ status },
+				now
+			);
+		});
+		emitDataChanged('attendance');
+	}
+
+	private async enqueueAttendanceAction(
+		db: ReturnType<typeof getDB>,
+		target: AttendanceActionTarget,
+		payload: Record<string, unknown>,
+		clientOccurredAt: string
+	): Promise<void> {
+		const queue = db.attendanceActionQueue;
+		const items = await queue.toArray();
+		const existing = items.find(
+			(item) =>
+				item.actionType === target.actionType &&
+				item.clubId === target.clubId &&
+				item.sessionId === target.sessionId &&
+				(item.recordId ?? '') === (target.recordId ?? '') &&
+				(item.studentId ?? '') === (target.studentId ?? '')
+		);
+
+		if (existing) {
+			await queue.update(existing.id, {
+				payload,
+				status: 'pending',
+				error: undefined,
+				updatedAt: clientOccurredAt,
+				clientOccurredAt
+			});
+			return;
+		}
+
+		await queue.add({
+			id: crypto.randomUUID(),
+			actionType: target.actionType,
+			clubId: target.clubId,
+			sessionId: target.sessionId,
+			recordId: target.recordId,
+			studentId: target.studentId,
+			payload,
+			status: 'pending',
+			createdAt: clientOccurredAt,
+			updatedAt: clientOccurredAt,
+			clientOccurredAt
+		});
+	}
+
+	private async syncLocalAttendanceMirrorMessage(
+		db: ReturnType<typeof getDB>,
+		record: AttendanceRecord,
+		session: AttendanceSession,
+		now: string
+	): Promise<void> {
+		const messageId = attendanceMessageId(record.id);
+		const existing = await db.studentMessages.get(messageId);
+		const normalizedNotes = record.notes?.trim() || undefined;
+
+		if (!normalizedNotes) {
+			if (!existing || existing.deletedAt) return;
+			await db.studentMessages.update(messageId, {
+				deletedAt: now,
+				updatedAt: now,
+				lastModifiedAt: now,
+				syncStatus: 'synced',
+				syncError: undefined
+			});
+			return;
+		}
+
+		const nextMessage: StudentMessage = {
+			id: messageId,
+			studentId: record.studentId,
+			clubId: session.clubId,
+			messageType: 'attendance_note',
+			content: normalizedNotes,
+			authorName: existing?.authorName ?? 'Hệ thống',
+			authorUserId: existing?.authorUserId,
+			attendanceSessionId: session.id,
+			attendanceRecordId: record.id,
+			attendanceSessionDate: session.sessionDate,
+			attendanceStatus: record.attendanceStatus,
+			createdAt: existing?.createdAt ?? now,
 			updatedAt: now,
 			lastModifiedAt: now,
-			syncStatus: 'pending',
-			syncError: undefined
-		});
-		if (!updated) throw new Error('Attendance session does not exist.');
-		emitDataChanged('attendance');
+			syncStatus: 'synced'
+		};
+
+		await db.studentMessages.put(nextMessage);
 	}
 
 	private async isStudentExpectedOnWeekday(

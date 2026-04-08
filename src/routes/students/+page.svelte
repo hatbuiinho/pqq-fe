@@ -14,6 +14,7 @@
 		SuggestionInput,
 		StudentAvatarThumb,
 		StudentFormModal,
+		StudentMessagesModal,
 		getTodayIsoDate,
 		normalizeDateInput,
 		subscribeDataChanged
@@ -96,7 +97,9 @@
 		{ label: 'Tạm dừng', value: 'suspended' }
 	] as const;
 
-	const isSystemAdmin = $derived.by(() => hasSystemPermissionForSession($authSession, 'users:manage'));
+	const isSystemAdmin = $derived.by(() =>
+		hasSystemPermissionForSession($authSession, 'users:manage')
+	);
 	const fixedClubId = $derived.by(() => $authSession?.activeClubId ?? '');
 	const canCreateStudent = $derived.by(() =>
 		hasClubPermissionForSession($authSession, 'students:write')
@@ -108,7 +111,8 @@
 		hasClubPermissionForSession($authSession, 'media:manage')
 	);
 	const canBulkEditSelectedStudents = $derived.by(
-		() => selectedStudents.length > 0 && selectedStudents.every((student) => canEditStudent(student))
+		() =>
+			selectedStudents.length > 0 && selectedStudents.every((student) => canEditStudent(student))
 	);
 
 	let students = $state<Student[]>([]);
@@ -177,9 +181,15 @@
 	let pendingOpenStudentId = $state('');
 	let shouldAutoOpenStudent = $state(false);
 	let hasHandledDeepLinkOpen = $state(false);
+	let isStudentMessagesModalOpen = $state(false);
+	let selectedStudentMessagesStudentId = $state<string | null>(null);
+	let selectedStudentMessagesStudentName = $state('');
+	let selectedStudentMessagesStudentClubId = $state('');
 
 	const clubMap = $derived.by(() => new SvelteMap(clubs.map((club) => [club.id, club.name])));
-	const groupMap = $derived.by(() => new SvelteMap(clubGroups.map((group) => [group.id, group.name])));
+	const groupMap = $derived.by(
+		() => new SvelteMap(clubGroups.map((group) => [group.id, group.name]))
+	);
 	const beltRankMap = $derived.by(
 		() => new SvelteMap(beltRanks.map((beltRank) => [beltRank.id, beltRank.name]))
 	);
@@ -311,6 +321,9 @@
 	);
 	const editingStudent = $derived.by(
 		() => students.find((student) => student.id === editingId) ?? null
+	);
+	const selectedStudentMessagesStudent = $derived.by(
+		() => students.find((student) => student.id === selectedStudentMessagesStudentId) ?? null
 	);
 	const selectedStudentCount = $derived.by(() => selectedStudents.length);
 	const allFilteredStudentsSelected = $derived.by(
@@ -536,8 +549,7 @@
 			const codeQuery = normalizeSearchText(pendingOpenStudentCode);
 			targetStudent = students.find(
 				(student) =>
-					!student.deletedAt &&
-					normalizeSearchText(student.studentCode ?? '') === codeQuery
+					!student.deletedAt && normalizeSearchText(student.studentCode ?? '') === codeQuery
 			);
 		}
 
@@ -648,6 +660,21 @@
 	function closeModal() {
 		isModalOpen = false;
 		resetForm();
+	}
+
+	function openStudentMessagesModal(student: Student) {
+		if (student.deletedAt) return;
+		selectedStudentMessagesStudentId = student.id;
+		selectedStudentMessagesStudentName = student.fullName;
+		selectedStudentMessagesStudentClubId = student.clubId;
+		isStudentMessagesModalOpen = true;
+	}
+
+	function closeStudentMessagesModal() {
+		isStudentMessagesModalOpen = false;
+		selectedStudentMessagesStudentId = null;
+		selectedStudentMessagesStudentName = '';
+		selectedStudentMessagesStudentClubId = '';
 	}
 
 	function resetImportState() {
@@ -895,9 +922,7 @@
 					break;
 				case 'group':
 					if (!singleSelectedClubId) {
-						throw new Error(
-							'Đổi nhóm hàng loạt yêu cầu các võ sinh được chọn thuộc cùng một CLB.'
-						);
+						throw new Error('Đổi nhóm hàng loạt yêu cầu các võ sinh được chọn thuộc cùng một CLB.');
 					}
 					await studentUseCases.bulkUpdate(
 						selectedStudents.map((student) => student.id),
@@ -949,7 +974,8 @@
 			closeBulkActionModal();
 			await loadData();
 		} catch (error) {
-			bulkActionError = error instanceof Error ? error.message : 'Không thể áp dụng thao tác hàng loạt.';
+			bulkActionError =
+				error instanceof Error ? error.message : 'Không thể áp dụng thao tác hàng loạt.';
 			toastError(bulkActionError);
 		} finally {
 			isApplyingBulkAction = false;
@@ -979,11 +1005,11 @@
 			const formData = new FormData();
 			formData.append('file', importFile);
 
-				const response = await fetch(`${getApiBaseUrl()}/api/v1/students/import`, {
-					method: 'POST',
-					headers: withAuthHeaders(),
-					body: formData
-				});
+			const response = await fetch(`${getApiBaseUrl()}/api/v1/students/import`, {
+				method: 'POST',
+				headers: withAuthHeaders(),
+				body: formData
+			});
 
 			const payload = (await response.json()) as StudentImportResponse | { error?: string };
 			if (!response.ok) {
@@ -1055,9 +1081,7 @@
 		avatarImportFiles = acceptedFiles;
 		avatarImportFileNames = acceptedFiles.map((file) => file.name);
 		avatarImportError =
-			acceptedFiles.length === 0 && files.length > 0
-				? 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.'
-				: '';
+			acceptedFiles.length === 0 && files.length > 0 ? 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.' : '';
 	}
 
 	function handleAvatarImportDragEnter(event: DragEvent) {
@@ -1365,10 +1389,7 @@
 			/>
 		{/snippet}
 
-		<DataTableToolbar
-			bind:searchValue={search}
-			searchPlaceholder="Tìm theo võ sinh, CLB, cấp đai"
-		>
+		<DataTableToolbar bind:searchValue={search} searchPlaceholder="Tìm theo võ sinh, CLB, cấp đai">
 			{#snippet filters()}
 				{#if isSystemAdmin}
 					<select class="w-full rounded-lg border-slate-300 xl:w-52" bind:value={selectedClubId}>
@@ -1411,11 +1432,11 @@
 							checked={allFilteredStudentsSelected}
 							onchange={toggleSelectAllFilteredStudents}
 						/>
-							<span>Chọn tất cả theo bộ lọc</span>
-						</label>
-						<span class="text-sm text-slate-500">
-							Đã chọn {selectedStudentCount}
-						</span>
+						<span>Chọn tất cả theo bộ lọc</span>
+					</label>
+					<span class="text-sm text-slate-500">
+						Đã chọn {selectedStudentCount}
+					</span>
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
 					<button
@@ -1460,7 +1481,7 @@
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
-									class="size-4 shrink-0 rounded-md border-slate-300"
+										class="size-4 shrink-0 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={true}
 									/>
@@ -1476,7 +1497,9 @@
 											{student.fullName}
 										</a>
 									{:else}
-										<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+										<h3 class="min-w-0 truncate font-semibold text-slate-900">
+											{student.fullName}
+										</h3>
 									{/if}
 								</div>
 								<div class="space-y-1 text-sm">
@@ -1540,7 +1563,7 @@
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
-									class="size-4 shrink-0 rounded-md border-slate-300"
+										class="size-4 shrink-0 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={false}
 										onclick={(event) => event.stopPropagation()}
@@ -1558,7 +1581,9 @@
 											{student.fullName}
 										</a>
 									{:else}
-										<h3 class="min-w-0 truncate font-semibold text-slate-900">{student.fullName}</h3>
+										<h3 class="min-w-0 truncate font-semibold text-slate-900">
+											{student.fullName}
+										</h3>
 									{/if}
 								</div>
 								<div class="space-y-1 text-sm">
@@ -1587,6 +1612,14 @@
 									</p>
 								</div>
 								<div class="flex justify-end gap-2 pt-1">
+									<IconActionButton
+										icon="icon-[mdi--message-text-outline]"
+										label=" note"
+										onclick={(event) => {
+											event.stopPropagation();
+											openStudentMessagesModal(student);
+										}}
+									/>
 									<IconActionButton
 										icon="icon-[mdi--pencil-outline]"
 										label={`Sửa ${student.fullName}`}
@@ -1620,7 +1653,7 @@
 							<th class="py-2 pr-3">
 								<input
 									type="checkbox"
-								class="size-4 rounded-md border-slate-300"
+									class="size-4 rounded-md border-slate-300"
 									checked={allFilteredStudentsSelected}
 									onchange={toggleSelectAllFilteredStudents}
 								/>
@@ -1644,7 +1677,7 @@
 								<td class="py-3 pr-3">
 									<input
 										type="checkbox"
-									class="size-4 rounded-md border-slate-300"
+										class="size-4 rounded-md border-slate-300"
 										checked={isStudentSelected(student.id)}
 										disabled={!!student.deletedAt}
 										onclick={(event) => event.stopPropagation()}
@@ -1674,9 +1707,7 @@
 										{/if}
 									</div>
 								</td>
-								<td class="py-3 pr-3 text-slate-700"
-									>{student.studentCode ?? 'Tạo khi đồng bộ'}</td
-								>
+								<td class="py-3 pr-3 text-slate-700">{student.studentCode ?? 'Tạo khi đồng bộ'}</td>
 								<td class="py-3 pr-3 text-slate-700">{clubMap.get(student.clubId) ?? '-'}</td>
 								<td class="py-3 pr-3 text-slate-700"
 									>{groupMap.get(student.groupId ?? '') ?? '-'}</td
@@ -1707,6 +1738,14 @@
 												}}
 											/>
 										{:else}
+											<IconActionButton
+												icon="icon-[mdi--message-text-outline]"
+												label=""
+												onclick={(event) => {
+													event.stopPropagation();
+													openStudentMessagesModal(student);
+												}}
+											/>
 											<IconActionButton
 												icon="icon-[mdi--pencil-outline]"
 												label={`Sửa ${student.fullName}`}
@@ -1763,7 +1802,8 @@
 			</p>
 			<p class="text-xs text-slate-500">
 				Các trường ngày dùng định dạng <code>YYYY-MM-DD</code>. Để trống
-				<code>scheduleMode</code> để kế thừa lịch CLB. Dùng danh sách ngày cách nhau bằng dấu phẩy như
+				<code>scheduleMode</code> để kế thừa lịch CLB. Dùng danh sách ngày cách nhau bằng dấu phẩy
+				như
 				<code>mon,wed,fri</code> cho <code>scheduleDays</code>. Nếu <code>studentCode</code> để trống,
 				backend sẽ tự tạo khi đồng bộ.
 			</p>
@@ -1962,19 +2002,19 @@
 				class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
 			>
 				<div class="space-y-2">
-						<p class="text-sm font-medium text-slate-700">Xử lý avatar đã có</p>
+					<p class="text-sm font-medium text-slate-700">Xử lý avatar đã có</p>
 					<div class="flex flex-wrap gap-2">
 						<label
 							class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 						>
 							<input type="radio" bind:group={avatarImportReplaceStrategy} value="replace" />
-								<span>Thay avatar hiện có</span>
+							<span>Thay avatar hiện có</span>
 						</label>
 						<label
 							class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 						>
 							<input type="radio" bind:group={avatarImportReplaceStrategy} value="keep" />
-								<span>Giữ avatar cũ và bỏ qua</span>
+							<span>Giữ avatar cũ và bỏ qua</span>
 						</label>
 					</div>
 				</div>
@@ -1985,14 +2025,14 @@
 						onclick={selectAllMatchedAvatarImports}
 						disabled={avatarImportMatchMode === 'manual'}
 					>
-							Chọn tất cả bản ghi khớp
+						Chọn tất cả bản ghi khớp
 					</button>
 					<button
 						type="button"
 						class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700"
 						onclick={clearAllAvatarImportSelections}
 					>
-							Xóa chọn tất cả
+						Xóa chọn tất cả
 					</button>
 				</div>
 			</div>
@@ -2005,7 +2045,7 @@
 					bind:value={avatarImportSearch}
 				/>
 				<div class="flex flex-wrap gap-2">
-						{#each [{ value: 'all', label: 'Tất cả', count: avatarImportItems.length }, { value: 'matched', label: 'Khớp', count: getAvatarImportStatusCount('matched') }, { value: 'ambiguous', label: 'Mơ hồ', count: getAvatarImportStatusCount('ambiguous') }, { value: 'unmatched', label: 'Không khớp', count: getAvatarImportStatusCount('unmatched') }, { value: 'failed', label: 'Lỗi', count: getAvatarImportStatusCount('failed') }, { value: 'skipped', label: 'Bỏ qua', count: getAvatarImportStatusCount('skipped') }, { value: 'imported', label: 'Đã import', count: getAvatarImportStatusCount('imported') }] as filterOption (filterOption.value)}
+					{#each [{ value: 'all', label: 'Tất cả', count: avatarImportItems.length }, { value: 'matched', label: 'Khớp', count: getAvatarImportStatusCount('matched') }, { value: 'ambiguous', label: 'Mơ hồ', count: getAvatarImportStatusCount('ambiguous') }, { value: 'unmatched', label: 'Không khớp', count: getAvatarImportStatusCount('unmatched') }, { value: 'failed', label: 'Lỗi', count: getAvatarImportStatusCount('failed') }, { value: 'skipped', label: 'Bỏ qua', count: getAvatarImportStatusCount('skipped') }, { value: 'imported', label: 'Đã import', count: getAvatarImportStatusCount('imported') }] as filterOption (filterOption.value)}
 						<button
 							type="button"
 							class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
@@ -2031,7 +2071,7 @@
 					<p
 						class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500"
 					>
-							Không có file phù hợp với bộ lọc hiện tại.
+						Không có file phù hợp với bộ lọc hiện tại.
 					</p>
 				{/if}
 				{#each filteredAvatarImportItems as item (item.id)}
@@ -2074,10 +2114,10 @@
 									<p class="text-sm text-red-600">{item.errorMessage}</p>
 								{/if}
 								<p class="text-sm text-slate-600">
-										Tự khớp:
+									Tự khớp:
 									<span class="font-medium text-slate-800"
-											>{item.guessedStudentName ?? 'Không khớp'}</span
-										>
+										>{item.guessedStudentName ?? 'Không khớp'}</span
+									>
 								</p>
 								<div class="relative space-y-2">
 									<div class="flex gap-2">
@@ -2085,10 +2125,10 @@
 											<SuggestionInput
 												value={avatarImportSelectionQueries[item.id] ?? ''}
 												options={avatarImportStudentOptions}
-													placeholder="Tìm võ sinh theo mã hoặc tên"
+												placeholder="Tìm võ sinh theo mã hoặc tên"
 												disabled={item.status === 'failed' || item.status === 'imported'}
 												maxSuggestions={5}
-													emptyText="Không tìm thấy võ sinh."
+												emptyText="Không tìm thấy võ sinh."
 												onInputChange={(nextValue) =>
 													handleAvatarSelectionInput(item.id, nextValue)}
 												onSelect={(option) => {
@@ -2107,7 +2147,7 @@
 											disabled={item.status === 'failed' || item.status === 'imported'}
 											onclick={() => clearAvatarImportStudentSelection(item.id)}
 										>
-												Bỏ qua
+											Bỏ qua
 										</button>
 									</div>
 								</div>
@@ -2132,8 +2172,8 @@
 					disabled={isConfirmingAvatarImport || selectedAvatarImportCount === 0}
 				>
 					{isConfirmingAvatarImport
-							? 'Đang xác nhận...'
-							: `Xác nhận import (${selectedAvatarImportCount})`}
+						? 'Đang xác nhận...'
+						: `Xác nhận import (${selectedAvatarImportCount})`}
 				</button>
 			</div>
 		</div>
@@ -2147,33 +2187,37 @@
 	onClose={closeAvatarPreview}
 />
 
-<AppModal open={isBulkActionModalOpen} title="Cập nhật võ sinh hàng loạt" onClose={closeBulkActionModal}>
+<AppModal
+	open={isBulkActionModalOpen}
+	title="Cập nhật võ sinh hàng loạt"
+	onClose={closeBulkActionModal}
+>
 	<div class="space-y-5 p-1">
 		<div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-			Áp dụng thay đổi cho <span class="font-semibold text-slate-900">{selectedStudentCount}</span> võ sinh
-			đã chọn.
+			Áp dụng thay đổi cho <span class="font-semibold text-slate-900">{selectedStudentCount}</span> võ
+			sinh đã chọn.
 		</div>
 
 		<div class="mb-2 space-y-1">
-				<span class="text-sm font-medium text-slate-700">Thao tác</span>
-				<select class="w-full rounded-lg border border-slate-300" bind:value={bulkActionType}>
-					<option value="delete">Xóa võ sinh đã chọn</option>
-					<option value="beltRank">Cập nhật cấp đai</option>
-					<option value="schedule">Cập nhật lịch học</option>
-					<option value="status">Cập nhật trạng thái</option>
-					<option value="group">Cập nhật nhóm</option>
-					{#if isSystemAdmin}
-						<option value="club">Cập nhật CLB</option>
-					{/if}
-				</select>
-			</div>
+			<span class="text-sm font-medium text-slate-700">Thao tác</span>
+			<select class="w-full rounded-lg border border-slate-300" bind:value={bulkActionType}>
+				<option value="delete">Xóa võ sinh đã chọn</option>
+				<option value="beltRank">Cập nhật cấp đai</option>
+				<option value="schedule">Cập nhật lịch học</option>
+				<option value="status">Cập nhật trạng thái</option>
+				<option value="group">Cập nhật nhóm</option>
+				{#if isSystemAdmin}
+					<option value="club">Cập nhật CLB</option>
+				{/if}
+			</select>
+		</div>
 
 		{#if bulkActionType === 'beltRank'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-						<span class="text-sm font-medium text-slate-700">Cấp đai</span>
-						<select class="w-full rounded-lg border border-slate-300" bind:value={bulkBeltRankId}>
-							<option value="">Chọn cấp đai</option>
+					<span class="text-sm font-medium text-slate-700">Cấp đai</span>
+					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkBeltRankId}>
+						<option value="">Chọn cấp đai</option>
 						{#each assignableBeltRanks as beltRank (beltRank.id)}
 							<option value={beltRank.id}>{beltRank.name}</option>
 						{/each}
@@ -2185,7 +2229,7 @@
 		{#if bulkActionType === 'status'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-						<span class="text-sm font-medium text-slate-700">Trạng thái</span>
+					<span class="text-sm font-medium text-slate-700">Trạng thái</span>
 					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkStatus}>
 						{#each statusOptions as option (option.value)}
 							<option value={option.value}>{option.label}</option>
@@ -2199,20 +2243,20 @@
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<p class="text-sm text-slate-600">
 					{#if singleSelectedClubId}
-							Cập nhật nhóm cho võ sinh thuộc
-							<span class="font-medium text-slate-900"
-								>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
-							>.
-						{:else}
-							Tất cả võ sinh được chọn phải thuộc cùng một CLB để đổi nhóm.
-						{/if}
-					</p>
+						Cập nhật nhóm cho võ sinh thuộc
+						<span class="font-medium text-slate-900"
+							>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
+						>.
+					{:else}
+						Tất cả võ sinh được chọn phải thuộc cùng một CLB để đổi nhóm.
+					{/if}
+				</p>
 				<select
 					class="w-full rounded-lg border border-slate-300"
 					bind:value={bulkGroupId}
 					disabled={!singleSelectedClubId}
 				>
-						<option value="">Không có nhóm</option>
+					<option value="">Không có nhóm</option>
 					{#each bulkGroupOptions as group (group.id)}
 						<option value={group.id}>{group.name}</option>
 					{/each}
@@ -2223,16 +2267,16 @@
 		{#if bulkActionType === 'club'}
 			<div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
 				<label class="space-y-1">
-						<span class="text-sm font-medium text-slate-700">CLB</span>
-						<select class="w-full rounded-lg border border-slate-300" bind:value={bulkClubId}>
-							<option value="">Chọn CLB</option>
+					<span class="text-sm font-medium text-slate-700">CLB</span>
+					<select class="w-full rounded-lg border border-slate-300" bind:value={bulkClubId}>
+						<option value="">Chọn CLB</option>
 						{#each assignableClubs as club (club.id)}
 							<option value={club.id}>{club.name}</option>
 						{/each}
 					</select>
 				</label>
 				<p class="text-xs text-slate-500">
-						Đổi CLB sẽ xóa nhóm hiện tại và đặt lại lịch học theo lịch CLB mới.
+					Đổi CLB sẽ xóa nhóm hiện tại và đặt lại lịch học theo lịch CLB mới.
 				</p>
 			</div>
 		{/if}
@@ -2244,29 +2288,29 @@
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={bulkScheduleMode} value="inherit" />
-							<span>Kế thừa lịch CLB</span>
+						<span>Kế thừa lịch CLB</span>
 					</label>
 					<label
 						class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
 					>
 						<input type="radio" bind:group={bulkScheduleMode} value="custom" />
-							<span>Lịch tùy chỉnh</span>
+						<span>Lịch tùy chỉnh</span>
 					</label>
 				</div>
 
 				{#if bulkScheduleMode === 'custom'}
 					<p class="text-sm text-slate-600">
 						{#if singleSelectedClubId}
-								Chọn ngày tập trong
-								<span class="font-medium text-slate-900"
-									>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
-								>.
-							{:else}
-								Tất cả võ sinh được chọn phải thuộc cùng một CLB để áp dụng lịch tùy chỉnh.
-							{/if}
-						</p>
+							Chọn ngày tập trong
+							<span class="font-medium text-slate-900"
+								>{clubMap.get(singleSelectedClubId) ?? 'CLB đã chọn'}</span
+							>.
+						{:else}
+							Tất cả võ sinh được chọn phải thuộc cùng một CLB để áp dụng lịch tùy chỉnh.
+						{/if}
+					</p>
 					<div class="flex flex-wrap gap-2">
-							{#each [{ value: 'mon', label: 'T2' }, { value: 'tue', label: 'T3' }, { value: 'wed', label: 'T4' }, { value: 'thu', label: 'T5' }, { value: 'fri', label: 'T6' }, { value: 'sat', label: 'T7' }, { value: 'sun', label: 'CN' }] as weekdayOption (weekdayOption.value)}
+						{#each [{ value: 'mon', label: 'T2' }, { value: 'tue', label: 'T3' }, { value: 'wed', label: 'T4' }, { value: 'thu', label: 'T5' }, { value: 'fri', label: 'T6' }, { value: 'sat', label: 'T7' }, { value: 'sun', label: 'CN' }] as weekdayOption (weekdayOption.value)}
 							<button
 								type="button"
 								class={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
@@ -2287,7 +2331,7 @@
 
 		{#if bulkActionType === 'delete'}
 			<p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-					Thao tác này sẽ xóa mềm toàn bộ võ sinh đã chọn.
+				Thao tác này sẽ xóa mềm toàn bộ võ sinh đã chọn.
 			</p>
 		{/if}
 
@@ -2301,7 +2345,7 @@
 				type="button"
 				onclick={closeBulkActionModal}
 			>
-					Hủy
+				Hủy
 			</button>
 			<button
 				class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -2309,7 +2353,7 @@
 				onclick={() => void handleBulkActionApply()}
 				disabled={isApplyingBulkAction}
 			>
-					{isApplyingBulkAction ? 'Đang áp dụng...' : 'Áp dụng'}
+				{isApplyingBulkAction ? 'Đang áp dụng...' : 'Áp dụng'}
 			</button>
 		</div>
 	</div>
@@ -2337,4 +2381,17 @@
 	studentCodeDisplay={editingId ? form.studentCode || 'Tạo khi đồng bộ' : 'Tạo khi đồng bộ'}
 	statusOptions={[...statusOptions]}
 	canManageAvatars={editingStudent ? canManageStudentMedia(editingStudent) : false}
+/>
+
+<StudentMessagesModal
+	open={isStudentMessagesModalOpen}
+	studentId={selectedStudentMessagesStudentId}
+	studentName={selectedStudentMessagesStudentName}
+	studentClubId={selectedStudentMessagesStudentClubId}
+	canManageMessages={selectedStudentMessagesStudent
+		? canEditStudent(selectedStudentMessagesStudent)
+		: false}
+	currentUserId={$authSession?.user.id ?? ''}
+	currentUserName={$authSession?.user.fullName ?? ''}
+	onClose={closeStudentMessagesModal}
 />

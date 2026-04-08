@@ -41,6 +41,7 @@ export { default as EmptyState } from './ui/components/EmptyState.svelte';
 export { default as AppModal } from './ui/components/AppModal.svelte';
 export { default as AppDatePicker } from './ui/components/AppDatePicker.svelte';
 export { default as StudentFormModal } from './ui/components/StudentFormModal.svelte';
+export { default as StudentMessagesModal } from './ui/components/StudentMessagesModal.svelte';
 export { default as StudentAvatarThumb } from './ui/components/StudentAvatarThumb.svelte';
 export { default as SuggestionInput } from './ui/components/SuggestionInput.svelte';
 export { default as ImagePreviewModal } from './ui/components/ImagePreviewModal.svelte';

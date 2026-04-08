@@ -9,6 +9,7 @@
 		title: string;
 		description?: string;
 		size?: ModalSize;
+		fullScreenOnMobile?: boolean;
 		allowOverflow?: boolean;
 		closeOnBackdrop?: boolean;
 		closeOnEscape?: boolean;
@@ -22,6 +23,7 @@
 		title,
 		description,
 		size = 'lg',
+		fullScreenOnMobile = false,
 		allowOverflow = false,
 		closeOnBackdrop = true,
 		closeOnEscape = true,
@@ -63,7 +65,7 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+	<div class={`fixed inset-0 z-50 flex items-center justify-center ${fullScreenOnMobile ? 'p-0 sm:p-4' : 'p-4'}`}>
 		<button
 			type="button"
 			class="absolute inset-0 bg-slate-900/45"
@@ -71,7 +73,11 @@
 			aria-label="Close modal"
 		></button>
 		<div
-			class={`relative flex max-h-[90dvh] w-full min-w-0 flex-col rounded-2xl bg-white shadow-xl ${allowOverflow ? 'overflow-visible' : 'overflow-hidden'} ${sizeClasses[size]}`}
+			class={`relative flex w-full min-w-0 flex-col bg-white shadow-xl ${
+				fullScreenOnMobile
+					? `h-dvh max-h-dvh rounded-none sm:h-auto sm:max-h-[90dvh] sm:rounded-2xl ${sizeClasses[size]}`
+					: `max-h-[90dvh] rounded-2xl ${sizeClasses[size]}`
+			} ${allowOverflow ? 'overflow-visible' : 'overflow-hidden'}`}
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}

@@ -1,4 +1,6 @@
 import type {
+	AttendanceActionPushRequest,
+	AttendanceActionPushResponse,
 	SyncPullRequest,
 	SyncPullResponse,
 	SyncPushRequest,
@@ -8,6 +10,7 @@ import type {
 import { withAuthHeaders } from '$lib/app/auth';
 
 export interface SyncApiClient {
+	pushAttendanceActions(request: AttendanceActionPushRequest): Promise<AttendanceActionPushResponse>;
 	push(request: SyncPushRequest): Promise<SyncPushResponse>;
 	pull(request: SyncPullRequest): Promise<SyncPullResponse>;
 	rebase(): Promise<SyncRebaseResponse>;
@@ -35,14 +38,37 @@ export class HttpSyncApiClient implements SyncApiClient {
 		private readonly fetchImpl: FetchLike = fetch
 	) {}
 
+	async pushAttendanceActions(
+		request: AttendanceActionPushRequest
+	): Promise<AttendanceActionPushResponse> {
+		const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/attendance-actions`, {
+			method: 'POST',
+			headers: withAuthHeaders({
+				'content-type': 'application/json'
+			}),
+			body: JSON.stringify(request)
+		});
+
+		if (!response.ok) {
+			throw new Error(
+				await extractErrorMessage(
+					response,
+					`Attendance sync failed with status ${response.status}.`
+				)
+			);
+		}
+
+		return response.json() as Promise<AttendanceActionPushResponse>;
+	}
+
 	async push(request: SyncPushRequest): Promise<SyncPushResponse> {
-			const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/push`, {
-				method: 'POST',
-				headers: withAuthHeaders({
-					'content-type': 'application/json'
-				}),
-				body: JSON.stringify(request)
-			});
+		const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/push`, {
+			method: 'POST',
+			headers: withAuthHeaders({
+				'content-type': 'application/json'
+			}),
+			body: JSON.stringify(request)
+		});
 
 		if (!response.ok) {
 			throw new Error(
@@ -62,12 +88,12 @@ export class HttpSyncApiClient implements SyncApiClient {
 		const response = await this.fetchImpl(
 			`${this.baseUrl}/api/v1/sync/pull?${searchParams.toString()}`,
 			{
-					method: 'GET',
-					headers: withAuthHeaders({
-						accept: 'application/json'
-					})
-				}
-			);
+				method: 'GET',
+				headers: withAuthHeaders({
+					accept: 'application/json'
+				})
+			}
+		);
 
 		if (!response.ok) {
 			throw new Error(
@@ -79,12 +105,12 @@ export class HttpSyncApiClient implements SyncApiClient {
 	}
 
 	async rebase(): Promise<SyncRebaseResponse> {
-			const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/rebase`, {
-				method: 'GET',
-				headers: withAuthHeaders({
-					accept: 'application/json'
-				})
-			});
+		const response = await this.fetchImpl(`${this.baseUrl}/api/v1/sync/rebase`, {
+			method: 'GET',
+			headers: withAuthHeaders({
+				accept: 'application/json'
+			})
+		});
 
 		if (!response.ok) {
 			throw new Error(

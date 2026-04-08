@@ -1,4 +1,5 @@
 import type {
+	AttendanceActionType,
 	AttendanceRecord,
 	AttendanceSession,
 	BeltRank,
@@ -6,6 +7,7 @@ import type {
 	ClubGroup,
 	ClubSchedule,
 	Student,
+	StudentMessage,
 	StudentSchedule,
 	StudentScheduleProfile
 } from '$lib/domain/models';
@@ -16,6 +18,7 @@ export type SyncEntityName =
 	| 'club_schedules'
 	| 'belt_ranks'
 	| 'students'
+	| 'student_messages'
 	| 'student_schedule_profiles'
 	| 'student_schedules'
 	| 'attendance_sessions'
@@ -28,6 +31,7 @@ export interface SyncEntityMap {
 	club_schedules: ClubSchedule;
 	belt_ranks: BeltRank;
 	students: Student;
+	student_messages: StudentMessage;
 	student_schedule_profiles: StudentScheduleProfile;
 	student_schedules: StudentSchedule;
 	attendance_sessions: AttendanceSession;
@@ -97,10 +101,51 @@ export interface SyncRebaseResponse {
 	clubSchedules: ClubSchedule[];
 	beltRanks: BeltRank[];
 	students: Student[];
+	studentMessages: StudentMessage[];
 	studentScheduleProfiles: StudentScheduleProfile[];
 	studentSchedules: StudentSchedule[];
 	attendanceSessions: AttendanceSession[];
 	attendanceRecords: AttendanceRecord[];
+}
+
+export interface AttendanceActionMutation {
+	actionId: string;
+	actionType: AttendanceActionType;
+	clubId: string;
+	sessionId: string;
+	recordId?: string;
+	studentId?: string;
+	payload: Record<string, unknown>;
+	clientOccurredAt: string;
+}
+
+export interface AttendanceActionPushRequest {
+	deviceId: string;
+	actions: AttendanceActionMutation[];
+}
+
+export interface AttendanceActionAppliedChange<TEntityName extends 'attendance_sessions' | 'attendance_records'> {
+	entityName: TEntityName;
+	record: SyncEntityMap[TEntityName];
+	serverModifiedAt: string;
+}
+
+export interface AttendanceActionError {
+	actionId: string;
+	actionType: AttendanceActionType;
+	message: string;
+	recordId?: string;
+	sessionId: string;
+	studentId?: string;
+	serverSession?: AttendanceSession;
+	serverRecord?: AttendanceRecord;
+}
+
+export interface AttendanceActionPushResponse {
+	serverTime: string;
+	appliedActionIds: string[];
+	changes: AttendanceActionAppliedChange<'attendance_sessions' | 'attendance_records'>[];
+	errors: AttendanceActionError[];
 }
 
 export type SyncRealtimeEventType = 'connected' | 'sync.changed' | 'ping';
