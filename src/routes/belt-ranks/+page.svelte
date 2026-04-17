@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import {
 		DataTableToolbar,
@@ -65,6 +67,7 @@
 	let importFile = $state<File | null>(null);
 	let importFileName = $state('');
 	let importFormError = $state('');
+	let pendingBeltRankIdFromQuery = $state('');
 
 	const filteredBeltRanks = $derived.by(() => {
 		const q = normalizeSearchText(search);
@@ -110,6 +113,8 @@
 	});
 
 	onMount(() => {
+		const params = new URLSearchParams(window.location.search);
+		pendingBeltRankIdFromQuery = (params.get('beltRankId') ?? '').trim();
 		void loadBeltRanks();
 
 		return subscribeDataChanged(() => {
@@ -121,6 +126,14 @@
 		try {
 			isLoading = true;
 			beltRanks = await beltRankUseCases.list();
+			if (pendingBeltRankIdFromQuery) {
+				const target = beltRanks.find((beltRank) => beltRank.id === pendingBeltRankIdFromQuery);
+				if (target && !target.deletedAt) {
+					startEdit(target);
+				}
+				replaceState(resolve('/belt-ranks'), {});
+				pendingBeltRankIdFromQuery = '';
+			}
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Failed to load belt ranks.');
 		} finally {

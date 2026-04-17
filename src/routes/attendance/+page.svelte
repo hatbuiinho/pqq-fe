@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import {
 		AppDatePicker,
@@ -211,6 +213,7 @@
 	let studentDetailErrors = $state<StudentFormErrors>({});
 	let studentDetailCustomScheduleDays = $state<Weekday[]>([]);
 	let avatarUrls = $state<Record<string, string>>({});
+	let pendingSessionIdFromQuery = $state('');
 
 	const studentStatusOptions = [
 		{ label: 'Đang học', value: 'active' },
@@ -515,6 +518,8 @@
 	});
 
 	onMount(() => {
+		const params = new URLSearchParams(window.location.search);
+		pendingSessionIdFromQuery = (params.get('sessionId') ?? '').trim();
 		void loadInitialData();
 
 		return subscribeDataChanged((source) => {
@@ -585,9 +590,18 @@
 				null;
 			setupClubId = defaultClub?.id ?? '';
 			setupNotes = '';
+			const allowedSessions = sessionRows.filter(
+				(sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId
+			);
 			selectedSessionId =
-				sessionRows.find((sessionItem) => isSystemAdmin || !fixedClubId || sessionItem.clubId === fixedClubId)
-					?.id ?? '';
+				(pendingSessionIdFromQuery &&
+					allowedSessions.find((sessionItem) => sessionItem.id === pendingSessionIdFromQuery)?.id) ??
+				allowedSessions[0]?.id ??
+				'';
+			if (pendingSessionIdFromQuery) {
+				replaceState(resolve('/attendance'), {});
+				pendingSessionIdFromQuery = '';
+			}
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Không thể tải dữ liệu điểm danh.');
 		}

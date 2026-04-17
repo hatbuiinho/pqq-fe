@@ -50,7 +50,8 @@
 			title: string;
 			detail?: string;
 			syncError?: string;
-			href: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs';
+			route: '/clubs' | '/belt-ranks' | '/students' | '/attendance';
+			search?: string;
 		}>
 	>([]);
 	let { children } = $props();
@@ -68,7 +69,7 @@
 	let managersStarted = $state(false);
 	let profilePopoverOpen = $state(false);
 	let profilePopoverElement = $state<HTMLElement | null>(null);
-	let hydratedSessionToken = $state<string | null>(null);
+	let hydratedSessionKey = $state<string | null>(null);
 	let isHydratingSessionData = $state(false);
 	let isOwnerInviteModalOpen = $state(false);
 	let isCreatingOwnerInvite = $state(false);
@@ -144,6 +145,15 @@
 		) ?? currentAuthSession?.memberships[0]
 	);
 	const canReadAuditLogs = $derived(isSystemAdmin || activeClubMembership?.clubRole === 'owner');
+	const switchableMemberships = $derived.by(
+		() => currentAuthSession?.memberships.filter((membership) => membership.isActive) ?? []
+	);
+	const canSwitchWorkingClub = $derived(
+		isSystemAdmin || switchableMemberships.length > 1
+	);
+	const currentHydrationKey = $derived(
+		currentAuthSession ? `${currentAuthSession.user.id}:${currentAuthSession.activeClubId ?? ''}` : null
+	);
 	const visibleNavItems = $derived.by(() =>
 		navItems.filter((item) => {
 			if (item.href === '/clubs' || item.href === '/belt-ranks' || item.href === '/users') {
@@ -334,55 +344,61 @@
 				]);
 
 			syncIssues = [
-				...clubs.map((club: Club) => ({
-					entityName: 'clubs' as const,
-					recordId: club.id,
-					title: club.name,
-					detail: club.code ?? club.id,
-					syncError: club.syncError,
-					href: '/clubs' as const
-				})),
-				...clubGroups.map((group: ClubGroup) => ({
-					entityName: 'club_groups' as const,
-					recordId: group.id,
-					title: group.name,
-					detail: group.clubId,
-					syncError: group.syncError,
-					href: '/clubs' as const
-				})),
-				...beltRanks.map((beltRank: BeltRank) => ({
-					entityName: 'belt_ranks' as const,
-					recordId: beltRank.id,
-					title: beltRank.name,
-					detail: `Order ${beltRank.order}`,
-					syncError: beltRank.syncError,
-					href: '/belt-ranks' as const
-				})),
-				...students.map((student: Student) => ({
-					entityName: 'students' as const,
-					recordId: student.id,
-					title: student.fullName,
-					detail: student.studentCode ?? student.id,
-					syncError: student.syncError,
-					href: '/students' as const
-				})),
-				...attendanceSessions.map((attendanceSession: AttendanceSession) => ({
-					entityName: 'attendance_sessions' as const,
-					recordId: attendanceSession.id,
-					title: attendanceSession.sessionDate,
-					detail: attendanceSession.clubId,
-					syncError: attendanceSession.syncError,
-					href: '/attendance' as const
-				})),
-				...attendanceRecords.map((attendanceRecord: AttendanceRecord) => ({
-					entityName: 'attendance_records' as const,
-					recordId: attendanceRecord.id,
-					title: attendanceRecord.studentId,
-					detail: attendanceRecord.sessionId,
-					syncError: attendanceRecord.syncError,
-					href: '/attendance' as const
-				}))
-			];
+					...clubs.map((club: Club) => ({
+						entityName: 'clubs' as const,
+						recordId: club.id,
+						title: club.name,
+						detail: club.code ?? club.id,
+						syncError: club.syncError,
+						route: '/clubs' as const,
+						search: `?clubId=${encodeURIComponent(club.id)}`
+					})),
+					...clubGroups.map((group: ClubGroup) => ({
+						entityName: 'club_groups' as const,
+						recordId: group.id,
+						title: group.name,
+						detail: group.clubId,
+						syncError: group.syncError,
+						route: '/clubs' as const,
+						search: `?clubId=${encodeURIComponent(group.clubId)}&groupId=${encodeURIComponent(group.id)}`
+					})),
+					...beltRanks.map((beltRank: BeltRank) => ({
+						entityName: 'belt_ranks' as const,
+						recordId: beltRank.id,
+						title: beltRank.name,
+						detail: `Order ${beltRank.order}`,
+						syncError: beltRank.syncError,
+						route: '/belt-ranks' as const,
+						search: `?beltRankId=${encodeURIComponent(beltRank.id)}`
+					})),
+					...students.map((student: Student) => ({
+						entityName: 'students' as const,
+						recordId: student.id,
+						title: student.fullName,
+						detail: student.studentCode ?? student.id,
+						syncError: student.syncError,
+						route: '/students' as const,
+						search: `?studentId=${encodeURIComponent(student.id)}&open=1`
+					})),
+					...attendanceSessions.map((attendanceSession: AttendanceSession) => ({
+						entityName: 'attendance_sessions' as const,
+						recordId: attendanceSession.id,
+						title: attendanceSession.sessionDate,
+						detail: attendanceSession.clubId,
+						syncError: attendanceSession.syncError,
+						route: '/attendance' as const,
+						search: `?sessionId=${encodeURIComponent(attendanceSession.id)}`
+					})),
+					...attendanceRecords.map((attendanceRecord: AttendanceRecord) => ({
+						entityName: 'attendance_records' as const,
+						recordId: attendanceRecord.id,
+						title: attendanceRecord.studentId,
+						detail: attendanceRecord.sessionId,
+						syncError: attendanceRecord.syncError,
+						route: '/attendance' as const,
+						search: `?sessionId=${encodeURIComponent(attendanceRecord.sessionId)}&studentId=${encodeURIComponent(attendanceRecord.studentId)}`
+					}))
+				];
 		} finally {
 			isLoadingSyncIssues = false;
 		}
@@ -397,9 +413,11 @@
 		syncIssuesOpen = false;
 	}
 
-	function openSyncIssue(path: '/' | '/clubs' | '/belt-ranks' | '/students' | '/attendance' | '/users' | '/audit-logs') {
+	function openSyncIssue(route: '/clubs' | '/belt-ranks' | '/students' | '/attendance', search = '') {
 		closeSyncIssues();
-		void goto(resolve(path));
+		const target = `${resolve(route)}${search}`;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- route is resolved above; search preserves the sync issue context.
+		void goto(target);
 	}
 
 	function getEntityLabel(
@@ -450,7 +468,7 @@
 
 		const initialize = async () => {
 			try {
-				if (currentAuthSession?.token) {
+				if (currentAuthSession?.token && navigator.onLine) {
 					await refreshAuthSession();
 				}
 			} catch {
@@ -522,21 +540,30 @@
 	$effect(() => {
 		if (!isAuthReady || isPublicRoute) return;
 		if (!currentAuthSession?.token) {
-			hydratedSessionToken = null;
+			hydratedSessionKey = null;
 			isHydratingSessionData = false;
 			return;
 		}
-		if (hydratedSessionToken === currentAuthSession.token) return;
+		if (!currentHydrationKey || hydratedSessionKey === currentHydrationKey) return;
 
-		const targetToken = currentAuthSession.token;
-		hydratedSessionToken = targetToken;
-		isHydratingSessionData = true;
+		const targetHydrationKey = currentHydrationKey;
+		hydratedSessionKey = targetHydrationKey;
 		sidebarOpen = false;
 		profilePopoverOpen = false;
-		void syncManager.hydrateCurrentSession().finally(() => {
-			if (currentAuthSession?.token === targetToken) {
-				isHydratingSessionData = false;
+		void syncManager.shouldHydrateCurrentSession().then((shouldHydrate) => {
+			if (!shouldHydrate) {
+				if (currentHydrationKey === targetHydrationKey) {
+					isHydratingSessionData = false;
+				}
+				return;
 			}
+
+			isHydratingSessionData = true;
+			void syncManager.hydrateCurrentSession().finally(() => {
+				if (currentHydrationKey === targetHydrationKey) {
+					isHydratingSessionData = false;
+				}
+			});
 		});
 	});
 </script>
@@ -779,23 +806,23 @@
 											</div>
 										</div>
 
-										{#if currentAuthSession.memberships.length > 0}
+										{#if switchableMemberships.length > 0}
 											<div class="mt-4 space-y-2">
 												<span
 													class="block text-[11px] font-semibold tracking-[0.16em] text-(--app-muted) uppercase"
 												>
 													CLB đang làm việc
 												</span>
-												{#if isSystemAdmin}
+												{#if canSwitchWorkingClub}
 													<select
 													class="w-full rounded-2xl border border-(--app-line) bg-white p-3 text-sm text-(--app-ink) transition outline-none focus:border-slate-400"
-														value={activeClubMembership?.clubId ?? ''}
+														value={currentAuthSession.activeClubId ?? activeClubMembership?.clubId ?? ''}
 														onchange={(event) => {
 															setActiveClubId(event.currentTarget.value);
 															closeProfilePopover();
 														}}
 													>
-														{#each currentAuthSession.memberships as membership (membership.id)}
+														{#each switchableMemberships as membership (membership.id)}
 															<option value={membership.clubId}>
 																{membership.clubName} · {membership.clubRole === 'owner'
 																	? 'Chủ nhiệm'
@@ -1032,13 +1059,13 @@
 								{issue.syncError ?? 'Đồng bộ thất bại nhưng chưa có thông tin lỗi chi tiết.'}
 							</p>
 						</div>
-						<button
-							type="button"
-							class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-							onclick={() => {
-								openSyncIssue(issue.href);
-							}}
-						>
+							<button
+								type="button"
+								class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+								onclick={() => {
+									openSyncIssue(issue.route, issue.search);
+								}}
+							>
 							<span class="icon-[mdi--open-in-new] size-4"></span>
 							<span>Mở</span>
 						</button>

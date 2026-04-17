@@ -183,11 +183,19 @@ export async function refreshAuthSession(): Promise<AuthSession | null> {
 	if (!session?.token) return null;
 	const requestedToken = session.token;
 
-	const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/me`, {
-		headers: {
-			Authorization: `Bearer ${requestedToken}`
+	let response: Response;
+	try {
+		response = await fetch(`${getApiBaseUrl()}/api/v1/auth/me`, {
+			headers: {
+				Authorization: `Bearer ${requestedToken}`
+			}
+		});
+	} catch (error) {
+		if (typeof navigator !== 'undefined' && !navigator.onLine) {
+			return session;
 		}
-	});
+		throw error;
+	}
 	const payload = (await response.json().catch(() => null)) as AuthMeResponse | { error?: string } | null;
 	const latestSession = get(authSession);
 	if (latestSession?.token !== requestedToken) {
@@ -195,7 +203,9 @@ export async function refreshAuthSession(): Promise<AuthSession | null> {
 	}
 
 	if (!response.ok || !payload || !('user' in payload)) {
-		clearAuthSession();
+		if (response.status === 401 || response.status === 403) {
+			clearAuthSession();
+		}
 		throw new Error(
 			payload && 'error' in payload && payload.error ? payload.error : 'Phiên đăng nhập đã hết hạn.'
 		);

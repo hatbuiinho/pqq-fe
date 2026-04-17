@@ -140,6 +140,21 @@ class SyncManager {
 		await this.rebaseFromServerInternal({ silent: true });
 	}
 
+	async shouldHydrateCurrentSession(): Promise<boolean> {
+		if (!browser) return false;
+		if (!navigator.onLine) return false;
+		if (!this.getLastSyncAt()) return true;
+
+		const db = getDB();
+		const [clubCount, studentCount, sessionCount] = await Promise.all([
+			db.clubs.count(),
+			db.students.count(),
+			db.attendanceSessions.count()
+		]);
+
+		return clubCount === 0 && studentCount === 0 && sessionCount === 0;
+	}
+
 	private async rebaseFromServerInternal(options: { silent: boolean }): Promise<void> {
 		if (!browser || !navigator.onLine) {
 			updateSyncStatus({
@@ -393,6 +408,7 @@ class SyncManager {
 		if (actions.length === 0) return;
 
 		const db = getDB();
+		const actionsById = new Map(actions.map((action) => [action.actionId, action]));
 		const response = await this.apiClient.pushAttendanceActions({
 			deviceId: this.getDeviceID(),
 			actions
@@ -406,11 +422,38 @@ class SyncManager {
 				db.attendanceRecords
 			],
 			async () => {
+				const skippedRemoteRecordKeys = new Set<string>();
+
 				for (const appliedActionID of response.appliedActionIds) {
 					await db.attendanceActionQueue.delete(appliedActionID);
+					const appliedAction = actionsById.get(appliedActionID);
+					if (!appliedAction || appliedAction.actionType !== 'create_session') continue;
+
+					await db.attendanceSessions.update(appliedAction.sessionId, {
+						syncStatus: 'synced',
+						syncError: undefined
+					});
+					await db.attendanceRecords
+						.where('sessionId')
+						.equals(appliedAction.sessionId)
+						.modify({
+							syncStatus: 'synced',
+							syncError: undefined
+						});
+
+					skippedRemoteRecordKeys.add(`attendance_sessions:${appliedAction.sessionId}`);
+
+					const recordIDs = this.getCreateSessionRecordIDs(appliedAction.payload);
+					for (const recordID of recordIDs) {
+						skippedRemoteRecordKeys.add(`attendance_records:${recordID}`);
+					}
 				}
 
 				for (const change of response.changes) {
+					const key = `${change.entityName}:${change.record.id}`;
+					if (skippedRemoteRecordKeys.has(key)) {
+						continue;
+					}
 					await this.saveRemoteRecord(change.entityName, change.record);
 				}
 
@@ -453,6 +496,22 @@ class SyncManager {
 		if (response.appliedActionIds.length > 0 || response.errors.length > 0) {
 			emitDataChanged('sync');
 		}
+	}
+
+	private getCreateSessionRecordIDs(payload: AttendanceActionMutation['payload']): string[] {
+		const records = payload.records;
+		if (!Array.isArray(records)) return [];
+
+		return records
+			.map((record) =>
+				record &&
+				typeof record === 'object' &&
+				'id' in record &&
+				typeof record.id === 'string'
+					? record.id
+					: null
+			)
+			.filter((recordID): recordID is string => Boolean(recordID));
 	}
 
 	private async pullLatestChanges(): Promise<void> {

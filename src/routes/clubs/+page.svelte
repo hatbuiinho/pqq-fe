@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { onMount } from 'svelte';
 	import {
@@ -97,6 +99,8 @@
 		isActive: true
 	});
 	let editingGroupId = $state<string | null>(null);
+	let pendingClubIdFromQuery = $state('');
+	let pendingGroupIdFromQuery = $state('');
 	const generatedCode = $derived.by(() =>
 		generateUniqueClubCode(
 			form.name,
@@ -164,6 +168,9 @@
 	});
 
 	onMount(() => {
+		const params = new URLSearchParams(window.location.search);
+		pendingClubIdFromQuery = (params.get('clubId') ?? '').trim();
+		pendingGroupIdFromQuery = (params.get('groupId') ?? '').trim();
 		void loadClubs();
 
 		return subscribeDataChanged(() => {
@@ -184,6 +191,23 @@
 			clubs = clubRows;
 			clubGroups = clubGroupRows;
 			clubSchedules = clubScheduleRows;
+			if (pendingClubIdFromQuery) {
+				const targetClub = clubRows.find((club) => club.id === pendingClubIdFromQuery);
+				if (targetClub && !targetClub.deletedAt) {
+					if (pendingGroupIdFromQuery) {
+						await openGroupsModal(targetClub);
+						const targetGroup = clubGroupRows.find((group) => group.id === pendingGroupIdFromQuery);
+						if (targetGroup && !targetGroup.deletedAt) {
+							startEditGroup(targetGroup);
+						}
+					} else {
+						startEdit(targetClub);
+					}
+				}
+				replaceState(resolve('/clubs'), {});
+				pendingClubIdFromQuery = '';
+				pendingGroupIdFromQuery = '';
+			}
 		} catch (error) {
 			toastError(error instanceof Error ? error.message : 'Failed to load clubs.');
 		} finally {

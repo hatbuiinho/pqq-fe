@@ -4,7 +4,7 @@ import type { AttendanceRecordRepository, CreateEntity } from '$lib/data/reposit
 
 export class DexieAttendanceRecordRepository implements AttendanceRecordRepository {
 	private isVisible(record: AttendanceRecord): boolean {
-		return !record.deletedAt || record.syncStatus !== 'synced';
+		return !record.deletedAt;
 	}
 
 	async getById(id: string): Promise<AttendanceRecord | undefined> {
