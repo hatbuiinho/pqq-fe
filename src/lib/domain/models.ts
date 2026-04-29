@@ -167,6 +167,7 @@ export interface StudentMessage extends BaseEntity<string> {
 
 export type AttendanceActionType =
 	| 'create_session'
+	| 'mark_all_present'
 	| 'set_record_status'
 	| 'set_record_note'
 	| 'set_session_note'

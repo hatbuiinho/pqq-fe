@@ -63,10 +63,12 @@ export interface StudentScheduleProfileRepository extends BaseRepository<
 	string
 > {
 	getByStudent(studentId: string): Promise<StudentScheduleProfile | undefined>;
+	listByStudents(studentIds: string[]): Promise<StudentScheduleProfile[]>;
 	saveForStudent(studentId: string, mode: StudentScheduleProfile['mode']): Promise<void>;
 }
 
 export interface StudentScheduleRepository extends BaseRepository<StudentSchedule, string> {
 	listByStudent(studentId: string): Promise<StudentSchedule[]>;
+	listByStudents(studentIds: string[]): Promise<StudentSchedule[]>;
 	replaceForStudent(studentId: string, weekdays: Weekday[]): Promise<void>;
 }

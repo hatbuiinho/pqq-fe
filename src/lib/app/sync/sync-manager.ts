@@ -427,25 +427,39 @@ class SyncManager {
 				for (const appliedActionID of response.appliedActionIds) {
 					await db.attendanceActionQueue.delete(appliedActionID);
 					const appliedAction = actionsById.get(appliedActionID);
-					if (!appliedAction || appliedAction.actionType !== 'create_session') continue;
+					if (!appliedAction) continue;
 
-					await db.attendanceSessions.update(appliedAction.sessionId, {
-						syncStatus: 'synced',
-						syncError: undefined
-					});
-					await db.attendanceRecords
-						.where('sessionId')
-						.equals(appliedAction.sessionId)
-						.modify({
+					if (appliedAction.actionType === 'create_session') {
+						await db.attendanceSessions.update(appliedAction.sessionId, {
 							syncStatus: 'synced',
 							syncError: undefined
 						});
+						await db.attendanceRecords
+							.where('sessionId')
+							.equals(appliedAction.sessionId)
+							.modify({
+								syncStatus: 'synced',
+								syncError: undefined
+							});
 
-					skippedRemoteRecordKeys.add(`attendance_sessions:${appliedAction.sessionId}`);
+						skippedRemoteRecordKeys.add(`attendance_sessions:${appliedAction.sessionId}`);
 
-					const recordIDs = this.getCreateSessionRecordIDs(appliedAction.payload);
-					for (const recordID of recordIDs) {
-						skippedRemoteRecordKeys.add(`attendance_records:${recordID}`);
+						const recordIDs = this.getCreateSessionRecordIDs(appliedAction.payload);
+						for (const recordID of recordIDs) {
+							skippedRemoteRecordKeys.add(`attendance_records:${recordID}`);
+						}
+						continue;
+					}
+
+					if (appliedAction.actionType === 'mark_all_present') {
+						const recordIDs = this.getMarkAllPresentRecordIDs(appliedAction.payload);
+						for (const recordID of recordIDs) {
+							await db.attendanceRecords.update(recordID, {
+								syncStatus: 'synced',
+								syncError: undefined
+							});
+							skippedRemoteRecordKeys.add(`attendance_records:${recordID}`);
+						}
 					}
 				}
 
@@ -512,6 +526,13 @@ class SyncManager {
 					: null
 			)
 			.filter((recordID): recordID is string => Boolean(recordID));
+	}
+
+	private getMarkAllPresentRecordIDs(payload: AttendanceActionMutation['payload']): string[] {
+		const recordIDs = payload.recordIds;
+		if (!Array.isArray(recordIDs)) return [];
+
+		return recordIDs.filter((recordID): recordID is string => typeof recordID === 'string');
 	}
 
 	private async pullLatestChanges(): Promise<void> {

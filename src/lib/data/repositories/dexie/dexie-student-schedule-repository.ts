@@ -16,6 +16,21 @@ export class DexieStudentScheduleRepository implements StudentScheduleRepository
 		return rows.filter((row) => !row.deletedAt).sort((a, b) => a.weekday.localeCompare(b.weekday));
 	}
 
+	async listByStudents(studentIds: string[]): Promise<StudentSchedule[]> {
+		if (studentIds.length === 0) {
+			return [];
+		}
+
+		const rows = await getDB().studentSchedules.where('studentId').anyOf(studentIds).toArray();
+		return rows
+			.filter((row) => !row.deletedAt)
+			.sort((a, b) =>
+				a.studentId === b.studentId
+					? a.weekday.localeCompare(b.weekday)
+					: a.studentId.localeCompare(b.studentId)
+			);
+	}
+
 	async create(entity: CreateEntity<StudentSchedule, string>): Promise<string> {
 		return getDB().studentSchedules.add(entity as StudentSchedule);
 	}

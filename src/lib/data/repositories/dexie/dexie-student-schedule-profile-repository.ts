@@ -14,6 +14,15 @@ export class DexieStudentScheduleProfileRepository implements StudentSchedulePro
 		return getDB().studentScheduleProfiles.where('studentId').equals(studentId).first();
 	}
 
+	async listByStudents(studentIds: string[]): Promise<StudentScheduleProfile[]> {
+		if (studentIds.length === 0) {
+			return [];
+		}
+
+		const rows = await getDB().studentScheduleProfiles.where('studentId').anyOf(studentIds).toArray();
+		return rows.filter((row) => !row.deletedAt);
+	}
+
 	async list(): Promise<StudentScheduleProfile[]> {
 		return (await getDB().studentScheduleProfiles.toArray()).filter((row) => !row.deletedAt);
 	}

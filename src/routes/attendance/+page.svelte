@@ -189,6 +189,7 @@
 	let isLoadingDetail = $state(false);
 	let isCreating = $state(false);
 	let isApplyingBulk = $state(false);
+	let isMarkAllPresentConfirmOpen = $state(false);
 	let isChangingStatus = $state(false);
 	let isTogglingSessionStatus = $state(false);
 	let isDeletingSession = $state(false);
@@ -858,6 +859,24 @@
 			suppressLocalRefresh = false;
 			isApplyingBulk = false;
 		}
+	}
+
+	function openMarkAllPresentConfirm() {
+		if (!session) return;
+		if (!canManageCurrentSession) {
+			toastError('Bạn không có quyền cập nhật buổi điểm danh này.');
+			return;
+		}
+		isMarkAllPresentConfirmOpen = true;
+	}
+
+	function closeMarkAllPresentConfirm() {
+		isMarkAllPresentConfirmOpen = false;
+	}
+
+	async function handleConfirmMarkAllPresent() {
+		closeMarkAllPresentConfirm();
+		await handleMarkAllPresent();
 	}
 
 	async function handleSessionStatusToggle() {
@@ -1585,7 +1604,7 @@
 							<button
 								type="button"
 								class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-								onclick={handleMarkAllPresent}
+								onclick={openMarkAllPresentConfirm}
 								disabled={isCompleted || isApplyingBulk || isChangingStatus || !canManageCurrentSession}
 							>
 								{isApplyingBulk ? 'Đang cập nhật...' : 'Điểm danh có mặt tất cả'}
@@ -2162,6 +2181,37 @@
 				disabled={isDeletingSession}
 			>
 				Xác nhận xóa
+			</button>
+		</div>
+	</div>
+</AppModal>
+
+<AppModal
+	open={isMarkAllPresentConfirmOpen}
+	title="Điểm danh tất cả võ sinh"
+	description="Thao tác này sẽ đánh dấu tất cả võ sinh trong buổi là có mặt."
+	size="sm"
+	onClose={closeMarkAllPresentConfirm}
+>
+	<div class="space-y-4">
+		<p class="text-sm text-slate-600">
+			Thao tác bulk này phù hợp khi cả lớp đã có mặt. Hãy xác nhận để tránh bấm nhầm.
+		</p>
+		<div class="flex justify-end gap-3">
+			<button
+				type="button"
+				class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+				onclick={closeMarkAllPresentConfirm}
+			>
+				Hủy
+			</button>
+			<button
+				type="button"
+				class="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+				onclick={handleConfirmMarkAllPresent}
+				disabled={isApplyingBulk || !canManageCurrentSession}
+			>
+				{isApplyingBulk ? 'Đang cập nhật...' : 'Điểm danh tất cả'}
 			</button>
 		</div>
 	</div>

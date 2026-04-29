@@ -1,4 +1,6 @@
 import { emitDataChanged } from '$lib/app/data-events';
+import { browser } from '$app/environment';
+import { attendanceApi } from '$lib/app/attendance-api';
 import { getDB } from '$lib/data/local/app-db';
 import type {
 	AttendanceActionQueueItem,
@@ -83,31 +85,65 @@ export class AttendanceUseCases {
 		if (!club || club.deletedAt) throw new Error('Club does not exist.');
 		if (!club.isActive) throw new Error('Club is inactive.');
 
+		if (browser && navigator.onLine) {
+			try {
+				return await this.createSessionOnline(input);
+			} catch (error) {
+				if (!this.isCreateSessionNetworkFallback(error)) {
+					throw error;
+				}
+			}
+		}
+
+		return this.createSessionOffline(input);
+	}
+
+	private async createSessionOnline(input: CreateSessionInput): Promise<AttendanceSession> {
+		const response = await attendanceApi.createSession({
+			clubId: input.clubId,
+			sessionDate: input.sessionDate,
+			notes: input.notes?.trim() || undefined
+		});
+
+		const db = getDB();
+		await db.transaction('rw', [db.attendanceSessions, db.attendanceRecords], async () => {
+			await db.attendanceSessions.put({
+				...response.session,
+				syncStatus: 'synced',
+				syncError: undefined
+			});
+			if (response.records.length > 0) {
+				await db.attendanceRecords.bulkPut(
+					response.records.map((record) => ({
+						...record,
+						syncStatus: 'synced',
+						syncError: undefined
+					}))
+				);
+			}
+		});
+
+		emitDataChanged('attendance');
+		return {
+			...response.session,
+			syncStatus: 'synced',
+			syncError: undefined
+		};
+	}
+
+	private async createSessionOffline(input: CreateSessionInput): Promise<AttendanceSession> {
 		const activeStudents = (await this.studentRepo.listByClub(input.clubId)).filter(
 			(student) => !student.deletedAt && student.status === 'active'
 		);
-		const sessionWeekday = getWeekdayFromIsoDate(input.sessionDate);
 		const clubScheduleRows = await this.clubScheduleRepo.listByClub(input.clubId);
 		const clubScheduleSet = new Set(
 			clubScheduleRows.filter((row) => row.isActive).map((row) => row.weekday)
 		);
-		const expectedStudents =
-			clubScheduleSet.size === 0 || !sessionWeekday
-				? activeStudents
-				: (
-						await Promise.all(
-							activeStudents.map(async (student) => ({
-								student,
-								expected: await this.isStudentExpectedOnWeekday(
-									student.id,
-									sessionWeekday,
-									clubScheduleSet
-								)
-							}))
-						)
-					)
-						.filter((item) => item.expected)
-						.map((item) => item.student);
+		const expectedStudents = await this.listExpectedStudentsForSession(
+			activeStudents,
+			input.sessionDate,
+			clubScheduleSet
+		);
 
 		const now = new Date().toISOString();
 		const session: AttendanceSession = {
@@ -163,6 +199,47 @@ export class AttendanceUseCases {
 
 		emitDataChanged('attendance');
 		return session;
+	}
+
+	private async listExpectedStudentsForSession(
+		activeStudents: Student[],
+		sessionDate: string,
+		clubScheduleSet: Set<string>
+	): Promise<Student[]> {
+		const sessionWeekday = getWeekdayFromIsoDate(sessionDate);
+		if (clubScheduleSet.size === 0 || !sessionWeekday) {
+			return activeStudents;
+		}
+
+		const studentIDs = activeStudents.map((student) => student.id);
+		const [profiles, customSchedules] = await Promise.all([
+			this.studentScheduleProfileRepo.listByStudents(studentIDs),
+			this.studentScheduleRepo.listByStudents(studentIDs)
+		]);
+
+		const profileModeByStudentId = new Map(profiles.map((profile) => [profile.studentId, profile.mode]));
+		const customWeekdaysByStudentId = new Map<string, Set<string>>();
+		for (const schedule of customSchedules) {
+			if (!schedule.isActive) continue;
+
+			const weekdaySet = customWeekdaysByStudentId.get(schedule.studentId) ?? new Set<string>();
+			weekdaySet.add(schedule.weekday);
+			customWeekdaysByStudentId.set(schedule.studentId, weekdaySet);
+		}
+
+		return activeStudents.filter((student) => {
+			const mode = profileModeByStudentId.get(student.id) ?? 'inherit';
+			if (mode === 'custom') {
+				return customWeekdaysByStudentId.get(student.id)?.has(sessionWeekday) ?? false;
+			}
+
+			return clubScheduleSet.has(sessionWeekday);
+		});
+	}
+
+	private isCreateSessionNetworkFallback(error: unknown): boolean {
+		if (!browser) return false;
+		return !navigator.onLine && error instanceof TypeError;
 	}
 
 	async getSessionDetails(
@@ -288,35 +365,38 @@ export class AttendanceUseCases {
 		if (!session || session.deletedAt) throw new Error('Attendance session does not exist.');
 		const now = new Date().toISOString();
 		const db = getDB();
+		const changedRecords = records.filter(
+			(record) => !(record.attendanceStatus === 'present' && Boolean(record.checkInAt))
+		);
+		if (changedRecords.length === 0) {
+			return;
+		}
 
 		await db.transaction('rw', [db.attendanceRecords, db.attendanceActionQueue], async () => {
-			for (const record of records) {
-				if (record.attendanceStatus === 'present' && record.checkInAt === now) continue;
-				if (record.attendanceStatus === 'present' && record.checkInAt) continue;
-				await db.attendanceRecords.update(record.id, {
+			await db.attendanceRecords.bulkPut(
+				changedRecords.map((record) => ({
+					...record,
 					attendanceStatus: 'present',
 					checkInAt: now,
 					updatedAt: now,
 					lastModifiedAt: now,
-					syncStatus: 'pending',
+					syncStatus: 'pending' as const,
 					syncError: undefined
-				});
-				await this.enqueueAttendanceAction(
-					db,
-					{
-						actionType: 'set_record_status',
-						clubId: session.clubId,
-						sessionId,
-						recordId: record.id,
-						studentId: record.studentId
-					},
-					{
-						attendanceStatus: 'present',
-						checkInAt: now
-					},
-					now
-				);
-			}
+				}))
+			);
+			await this.enqueueAttendanceAction(
+				db,
+				{
+					actionType: 'mark_all_present',
+					clubId: session.clubId,
+					sessionId
+				},
+				{
+					recordIds: changedRecords.map((record) => record.id),
+					checkInAt: now
+				},
+				now
+			);
 		});
 
 		emitDataChanged('attendance');
@@ -528,19 +608,4 @@ export class AttendanceUseCases {
 		await db.studentMessages.put(nextMessage);
 	}
 
-	private async isStudentExpectedOnWeekday(
-		studentId: string,
-		weekday: NonNullable<ReturnType<typeof getWeekdayFromIsoDate>>,
-		clubScheduleSet: Set<string>
-	): Promise<boolean> {
-		const profile = await this.studentScheduleProfileRepo.getByStudent(studentId);
-		const mode = profile?.mode ?? 'inherit';
-
-		if (mode === 'inherit') {
-			return clubScheduleSet.has(weekday);
-		}
-
-		const customSchedules = await this.studentScheduleRepo.listByStudent(studentId);
-		return customSchedules.some((row) => row.isActive && row.weekday === weekday);
-	}
 }
