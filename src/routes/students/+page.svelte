@@ -101,14 +101,26 @@
 		hasSystemPermissionForSession($authSession, 'users:manage')
 	);
 	const fixedClubId = $derived.by(() => $authSession?.activeClubId ?? '');
+	const effectiveActionClubId = $derived.by(() =>
+		isSystemAdmin ? selectedClubId : fixedClubId
+	);
 	const canCreateStudent = $derived.by(() =>
-		hasClubPermissionForSession($authSession, 'students:write')
+		Boolean(effectiveActionClubId) &&
+		hasClubPermissionForSession($authSession, 'students:write', {
+			clubId: effectiveActionClubId
+		})
 	);
 	const canImportStudents = $derived.by(() =>
-		hasClubPermissionForSession($authSession, 'imports:manage')
+		Boolean(effectiveActionClubId) &&
+		hasClubPermissionForSession($authSession, 'imports:manage', {
+			clubId: effectiveActionClubId
+		})
 	);
 	const canImportAvatars = $derived.by(() =>
-		hasClubPermissionForSession($authSession, 'media:manage')
+		Boolean(effectiveActionClubId) &&
+		hasClubPermissionForSession($authSession, 'media:manage', {
+			clubId: effectiveActionClubId
+		})
 	);
 	const canBulkEditSelectedStudents = $derived.by(
 		() =>
@@ -374,6 +386,17 @@
 	});
 
 	$effect(() => {
+		if (!isSystemAdmin) return;
+
+		const availableClubIds = new SvelteSet(assignableClubs.map((club) => club.id));
+		if (selectedClubId && availableClubIds.has(selectedClubId)) {
+			return;
+		}
+
+		selectedClubId = assignableClubs[0]?.id ?? '';
+	});
+
+	$effect(() => {
 		const existingIds = new SvelteSet(
 			students.filter((student) => !student.deletedAt).map((student) => student.id)
 		);
@@ -582,12 +605,16 @@
 
 	function openCreateModal() {
 		if (!canCreateStudent) {
-			toastError('Bạn không có quyền tạo võ sinh trong CLB đang làm việc.');
+			toastError(
+				isSystemAdmin && !effectiveActionClubId
+					? 'Vui lòng chọn CLB trước khi tạo võ sinh.'
+					: 'Bạn không có quyền tạo võ sinh trong CLB đang làm việc.'
+			);
 			return;
 		}
 		resetForm();
-		if (!isSystemAdmin && fixedClubId) {
-			form.clubId = fixedClubId;
+		if (effectiveActionClubId) {
+			form.clubId = effectiveActionClubId;
 		}
 		isModalOpen = true;
 	}
@@ -687,7 +714,11 @@
 
 	function openImportModal() {
 		if (!canImportStudents) {
-			toastError('Bạn không có quyền import võ sinh trong CLB đang làm việc.');
+			toastError(
+				isSystemAdmin && !effectiveActionClubId
+					? 'Vui lòng chọn CLB trước khi import võ sinh.'
+					: 'Bạn không có quyền import võ sinh trong CLB đang làm việc.'
+			);
 			return;
 		}
 		resetImportState();
@@ -723,7 +754,11 @@
 
 	function openAvatarImportModal() {
 		if (!canImportAvatars) {
-			toastError('Bạn không có quyền import avatar trong CLB đang làm việc.');
+			toastError(
+				isSystemAdmin && !effectiveActionClubId
+					? 'Vui lòng chọn CLB trước khi nhập avatar.'
+					: 'Bạn không có quyền import avatar trong CLB đang làm việc.'
+			);
 			return;
 		}
 		resetAvatarImportState();
