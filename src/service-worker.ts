@@ -72,11 +72,16 @@ sw.addEventListener('fetch', (event) => {
 	if (request.mode === 'navigate') {
 		event.respondWith(
 			(async () => {
+				const cache = await caches.open(PRECACHE_NAME);
+				const cachedShell = (await cache.match('/')) || (await cache.match('/offline.html'));
+				if (cachedShell) {
+					return cachedShell;
+				}
+
 				try {
 					return await fetch(request);
 				} catch {
-					const cache = await caches.open(PRECACHE_NAME);
-					return (await cache.match('/')) || (await cache.match('/offline.html'))!;
+					return Response.error();
 				}
 			})()
 		);

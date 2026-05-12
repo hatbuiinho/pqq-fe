@@ -266,7 +266,7 @@ export async function establishAuthenticatedSession(
 		activeClubId: ensureActiveClubId(undefined, payload.memberships),
 		clubPermissionsByClubId: {}
 	};
-	await resetLocalStateForAuthenticatedUser();
+	await resetLocalStateForAuthenticatedUser(payload.user.id);
 	authSession.set(session);
 	persistSession(session);
 	return session;
@@ -466,8 +466,12 @@ function buildPermissionMap(
 	) as Record<AuthClubPermissionKey, boolean>;
 }
 
-async function resetLocalStateForAuthenticatedUser(): Promise<void> {
+async function resetLocalStateForAuthenticatedUser(nextUserId?: string): Promise<void> {
 	if (typeof window === 'undefined') return;
+	if (nextUserId) {
+		const currentUserId = get(authSession)?.user.id ?? loadStoredSession()?.user.id;
+		if (currentUserId === nextUserId) return;
+	}
 
 	await clearAppData();
 	window.localStorage.removeItem(LAST_SYNC_AT_KEY);
