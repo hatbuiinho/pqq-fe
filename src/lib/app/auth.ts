@@ -113,6 +113,15 @@ function loadStoredSession(): AuthSession | null {
 	return parseJson<AuthSession>(raw);
 }
 
+function normalizeStoredSession(session: AuthSession): AuthSession {
+	return {
+		...session,
+		activeClubId: ensureActiveClubId(session.activeClubId, session.memberships ?? []),
+		memberships: session.memberships ?? [],
+		clubPermissionsByClubId: session.clubPermissionsByClubId ?? {}
+	};
+}
+
 function parseJson<T>(value: string): T | null {
 	try {
 		return JSON.parse(value) as T;
@@ -131,29 +140,35 @@ function ensureActiveClubId(
 	return memberships[0]?.clubId;
 }
 
-export function loadAuthSession() {
+export function loadAuthSession(): AuthSession | null {
 	const parsed = loadStoredSession();
 	if (!parsed) {
 		authSession.set(null);
 		if (typeof window !== 'undefined') {
 			window.localStorage.removeItem(AUTH_STORAGE_KEY);
 		}
-		return;
+		return null;
 	}
 	if (!parsed?.token || !parsed.user) {
 		authSession.set(null);
 		if (typeof window !== 'undefined') {
 			window.localStorage.removeItem(AUTH_STORAGE_KEY);
 		}
-		return;
+		return null;
 	}
 
-	authSession.set({
-		...parsed,
-		activeClubId: ensureActiveClubId(parsed.activeClubId, parsed.memberships ?? []),
-		memberships: parsed.memberships ?? [],
-		clubPermissionsByClubId: parsed.clubPermissionsByClubId ?? {}
-	});
+	const normalized = normalizeStoredSession(parsed);
+	authSession.set(normalized);
+	return normalized;
+}
+
+export function getStoredAuthSessionSnapshot(): AuthSession | null {
+	const parsed = loadStoredSession();
+	if (!parsed?.token || !parsed.user) {
+		return null;
+	}
+
+	return normalizeStoredSession(parsed);
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {

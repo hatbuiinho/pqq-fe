@@ -143,7 +143,6 @@ class SyncManager {
 	async shouldHydrateCurrentSession(): Promise<boolean> {
 		if (!browser) return false;
 		if (!navigator.onLine) return false;
-		if (!this.getLastSyncAt()) return true;
 
 		const db = getDB();
 		const [clubCount, studentCount, sessionCount] = await Promise.all([
@@ -152,7 +151,11 @@ class SyncManager {
 			db.attendanceSessions.count()
 		]);
 
-		return clubCount === 0 && studentCount === 0 && sessionCount === 0;
+		if (clubCount > 0 || studentCount > 0 || sessionCount > 0) {
+			return false;
+		}
+
+		return !this.getLastSyncAt();
 	}
 
 	private async rebaseFromServerInternal(options: { silent: boolean }): Promise<void> {

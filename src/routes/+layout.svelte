@@ -9,6 +9,7 @@
 		authSession,
 		ensureClubPermissions,
 		getDB,
+		getStoredAuthSessionSnapshot,
 		loadAuthSession,
 		logout,
 		resetSyncStatus,
@@ -445,7 +446,7 @@
 	}
 
 	onMount(() => {
-		loadAuthSession();
+		currentAuthSession = loadAuthSession();
 
 		const unsubscribeAuth = authSession.subscribe((value) => {
 			currentAuthSession = value;
@@ -492,6 +493,14 @@
 		if (!isAuthReady) return;
 
 		if (!currentAuthSession && !isPublicRoute) {
+			if (!navigator.onLine) {
+				const storedSession = getStoredAuthSessionSnapshot();
+				if (storedSession) {
+					currentAuthSession = storedSession;
+					authSession.set(storedSession);
+					return;
+				}
+			}
 			stopManagers();
 			if (pathname !== '/login') {
 				void goto(resolve('/login'), { replaceState: true });
