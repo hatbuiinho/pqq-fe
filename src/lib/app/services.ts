@@ -12,6 +12,7 @@ import { BeltRankUseCases } from '$lib/app/use-cases/belt-rank-use-cases';
 import { ClubGroupUseCases } from '$lib/app/use-cases/club-group-use-cases';
 import { ClubUseCases } from '$lib/app/use-cases/club-use-cases';
 import { ClubScheduleUseCases } from '$lib/app/use-cases/club-schedule-use-cases';
+import { studentApi } from '$lib/app/student-api';
 import { StudentUseCases } from '$lib/app/use-cases/student-use-cases';
 import { StudentScheduleUseCases } from '$lib/app/use-cases/student-schedule-use-cases';
 
@@ -45,7 +46,8 @@ export const studentUseCases = new StudentUseCases(
 	studentRepository,
 	clubRepository,
 	clubGroupRepository,
-	beltRankRepository
+	beltRankRepository,
+	studentApi
 );
 export const studentScheduleUseCases = new StudentScheduleUseCases(
 	studentScheduleProfileRepository,

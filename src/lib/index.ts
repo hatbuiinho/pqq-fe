@@ -25,6 +25,7 @@ export * from './app/services';
 export * from './app/data-events';
 export * from './app/auth';
 export * from './app/student-avatar-offline';
+export * from './app/student-api';
 export * from './app/user-management-api';
 export * from './app/sync/sync-api-client';
 export * from './app/sync/sync-config';
