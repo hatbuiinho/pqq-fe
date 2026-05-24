@@ -7,7 +7,6 @@
 		AppModal,
 		avatarUploadManager,
 		authSession,
-		clearAuthSession,
 		ensureClubPermissions,
 		getDB,
 		loadAuthSession,
@@ -472,7 +471,7 @@
 					await refreshAuthSession();
 				}
 			} catch {
-				clearAuthSession();
+				// Keep the last local session when auth refresh fails due to transient network issues.
 			} finally {
 				isAuthReady = true;
 			}
