@@ -467,6 +467,11 @@
 		document.addEventListener('pointerdown', handleDocumentPointerDown);
 
 		const initialize = async () => {
+			const hasLocalSession = Boolean(currentAuthSession?.token);
+			if (hasLocalSession) {
+				isAuthReady = true;
+			}
+
 			try {
 				if (currentAuthSession?.token && navigator.onLine) {
 					await refreshAuthSession();
@@ -474,7 +479,9 @@
 			} catch {
 				// Keep the last local session when auth refresh fails due to transient network issues.
 			} finally {
-				isAuthReady = true;
+				if (!hasLocalSession) {
+					isAuthReady = true;
+				}
 			}
 		};
 
